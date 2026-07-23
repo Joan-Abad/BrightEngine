@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# CMake out-of-source build directories (includes FetchContent downloads)
+/build/
+/build*/
+compile_commands.json

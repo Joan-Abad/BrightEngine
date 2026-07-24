@@ -94,9 +94,15 @@ Current dependencies:
   `libglew_static` (the fork does not provide a namespaced/aliased
   target name).
 
-When GLM is introduced for the OpenGL RHI backend, add it here with the
-same justification (license, maintenance status, why it doesn't duplicate
-an existing dependency).
+- **GLM** (`https://github.com/g-truc/glm.git`, tag `1.0.1`) — vector/matrix
+  math (transformation matrices, etc.) for the hand-written OpenGL exercises
+  in `sandbox/main.cpp`, ahead of the RHI's own math needs. MIT-licensed
+  (dual MIT/"Happy Bunny" as of the 1.0 series), actively maintained, no
+  overlapping dependency already in the project. Header-only, so unlike
+  GLFW/GLEW there's nothing to build and no example/test/tool options to
+  force off with `CACHE BOOL FORCE` — `FetchContent_MakeAvailable(glm)`
+  alone makes the `glm::glm` `INTERFACE` target available. Linked into the
+  `sandbox` target as `glm::glm`.
 
 ## Warnings / flags
 

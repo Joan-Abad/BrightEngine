@@ -157,6 +157,33 @@ píxeles caen dentro del triángulo) e interpola los valores del vertex
 shader sobre la superficie — así un triángulo con 3 vértices de colores
 distintos sale con degradado suave sin que se calcule a mano.
 
+**Un shader no es solo una abstracción de la API — es la arquitectura
+física del chip.** Antes de la era programable (~2001-2006), las GPUs
+tenían circuitos fijos y dedicados por tarea (una unidad de
+"transformación e iluminación" cableada, un combinador de texturas con
+parámetros ajustables pero no programables). La transición a shaders
+programables sustituyó esos circuitos especializados por arrays enormes
+de núcleos pequeños y genéricos (NVIDIA: "CUDA cores"; AMD: "stream
+processors"; Intel: "execution units"). Desde la **arquitectura de shader
+unificada** (~2006-2007, GeForce 8800/Xbox 360), el mismo núcleo físico
+ejecuta indistintamente código de vertex shader, fragment shader o
+compute shader — no hay ya hardware separado por etapa, es el mismo
+silicio genérico alimentado con distinto programa y distintos datos. Por
+eso escribir un shader es programar literalmente lo que se carga en esos
+núcleos, no una capa de software desconectada del chip.
+
+**Cómo se ejecutan miles de instancias a la vez:** las GPUs agrupan
+instancias del shader en bloques (NVIDIA: "warps", 32 hilos; AMD:
+"wavefronts", 64 hilos) donde **todos los hilos del grupo ejecutan la
+misma instrucción a la vez, sobre datos distintos** (SIMT — Single
+Instruction, Multiple Threads). Es la razón de que las GPUs sean
+extremadamente rápidas para aplicar la misma operación a millones de
+píxeles, pero comparativamente malas con código muy ramificado: si dentro
+del mismo grupo unos hilos toman un camino de un `if` y otros el `else`,
+el hardware ejecuta ambos caminos en serie para todo el grupo
+("divergencia de rama") — una fuente real de pérdida de rendimiento en
+shaders con lógica condicional compleja.
+
 **El pipeline** — el conjunto de decisiones (qué vertex shader, qué
 fragment shader, qué layout, estados fijos como blending/profundidad)
 empaquetado. En OpenGL "clásico" esto está disperso e implícito (bind
@@ -173,6 +200,60 @@ framebuffer.
 
 **Camino completo:** vértices → buffer → layout → shaders → pipeline →
 draw call → framebuffer → swapchain → pantalla.
+
+**Detalle práctico importante: los errores de GLSL son invisibles si no
+los compruebas.** El código de un shader es, para el compilador de C++,
+solo un string — un error de sintaxis en el GLSL no da ningún error de
+compilación de C++. Sin comprobar explícitamente el resultado
+(`glGetShaderiv(..., GL_COMPILE_STATUS, ...)` tras `glCompileShader`, y
+`glGetProgramiv(..., GL_LINK_STATUS, ...)` tras `glLinkProgram`, leyendo
+el mensaje real con `glGetShaderInfoLog`/`glGetProgramInfoLog` si falla),
+un shader roto simplemente no dibuja nada (o dibuja basura) sin ningún
+aviso — el fallo es completamente silencioso. Por eso se comprueba
+siempre, no es opcional ni paranoia de más.
+
+**Ya se ha construido un primer triángulo real** en `sandbox/main.cpp`,
+con OpenGL "a pelo" (sin ninguna capa RHI todavía) — sirvió para sentir
+en carne propia cada pieza de este camino antes de diseñar la
+abstracción. Ese código es intencionalmente temporal: se espera que gran
+parte de esta lógica se mueva a `engine/src/rhi/opengl/` una vez diseñada
+la RHI.
+
+---
+
+## Uniforms — pasar datos desde la CPU sin recompilar el shader
+
+Un **uniform** es un valor que permanece **constante para todos los
+vértices y todos los píxeles dentro de un mismo draw call** — de ahí el
+nombre. Es el contrapunto directo de un atributo: el atributo varía
+vértice a vértice y viene del buffer; el uniform es un único valor que
+subes desde la CPU justo antes de dibujar, y puede cambiar de un frame a
+otro sin tocar el buffer de vértices ni recompilar nada.
+
+Se declara en GLSL con la palabra clave `uniform` (`uniform float
+uRotation;`), y desde C++ se referencia por nombre:
+`glGetUniformLocation(shaderProgram, "uRotation")` (una vez, tras enlazar
+el program; devuelve `-1` si el nombre no existe o el compilador lo
+optimizó por no usarse), y se actualiza cada frame con
+`glUniform1f(location, valor)` — siempre **después** de `glUseProgram`,
+porque un uniform solo afecta al program actualmente activo (mismo patrón
+de estado global de siempre).
+
+No se limita a floats sueltos — puede ser `vec3`, `vec4`, y sobre todo
+**matrices** (`mat4`, para transformaciones de modelo/vista/proyección
+más adelante con GLM). Incluso las **texturas** se referencian mediante
+un uniform (`sampler2D`, que por debajo es solo un entero indicando qué
+unidad de textura usar). Lo típico que se pasa como uniform en un motor
+real: matrices de transformación, cámara, luces, tiempo, propiedades de
+material, resolución de pantalla — cualquier "parámetro" del draw call
+que no sea geometría en sí.
+
+**Para más adelante:** subir uniforms uno a uno con `glUniform1f` (etc.)
+funciona bien con pocos valores, pero motores reales que suben muchos
+datos relacionados a la vez (una matriz completa + varias luces) suelen
+usar **Uniform Buffer Objects (UBO)** — agrupan varios uniforms en un
+solo buffer de GPU, actualizable de una vez y compartible entre distintos
+shader programs.
 
 ---
 

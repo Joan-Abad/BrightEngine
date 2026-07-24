@@ -37,6 +37,18 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glew)
 
+# GLM (OpenGL Mathematics). Header-only, so unlike GLFW/GLEW there's no
+# library to build and no example/test/tool options to force off — it just
+# exposes the `glm::glm` INTERFACE target once fetched.
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        1.0.1
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_MakeAvailable(glm)
+
 add_executable(sandbox main.cpp)
 
 target_link_libraries(sandbox
@@ -44,4 +56,5 @@ target_link_libraries(sandbox
         brightengine::brightengine
         glfw
         libglew_static
+        glm::glm
 )

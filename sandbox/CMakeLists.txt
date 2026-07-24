@@ -18,10 +18,30 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glfw)
 
+# GLEW (OpenGL function loader). Use the Perlmint/glew-cmake fork, not the
+# upstream nigels-com/glew repo: upstream's CMakeLists.txt lives under
+# build/cmake instead of the repo root, which is awkward to consume with
+# FetchContent. The fork provides a root CMakeLists.txt built for this
+# exact use case. We only need the static library, so the shared variant
+# and the glewinfo/visualinfo helper executables are disabled.
+set(glew-cmake_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(glew-cmake_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(ONLY_LIBS ON CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    glew
+    GIT_REPOSITORY https://github.com/Perlmint/glew-cmake.git
+    GIT_TAG        glew-cmake-2.3.1
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_MakeAvailable(glew)
+
 add_executable(sandbox main.cpp)
 
 target_link_libraries(sandbox
     PRIVATE
         brightengine::brightengine
         glfw
+        libglew_static
 )

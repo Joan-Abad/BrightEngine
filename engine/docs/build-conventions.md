@@ -76,10 +76,27 @@ Current dependencies:
   Declared in `sandbox/CMakeLists.txt` with `GLFW_BUILD_EXAMPLES`,
   `GLFW_BUILD_TESTS`, `GLFW_BUILD_DOCS`, and `GLFW_INSTALL` forced `OFF` to
   avoid building/installing anything beyond the library itself.
+- **GLEW** (`https://github.com/Perlmint/glew-cmake.git`, tag
+  `glew-cmake-2.3.1`) — OpenGL function loader, used directly in
+  `sandbox/main.cpp` for the hand-written OpenGL triangle exercise (no RHI
+  involvement). Modified BSD / MIT / Khronos license (same license terms
+  as upstream GLEW), no overlapping dependency already in the project.
+  Uses the `Perlmint/glew-cmake` fork rather than the upstream
+  `nigels-com/glew` repo: upstream's `CMakeLists.txt` lives under
+  `build/cmake` instead of the repo root, which needs `SOURCE_SUBDIR` and
+  is awkward with `FetchContent`. The fork provides a root-level
+  `CMakeLists.txt` built for exactly this use case and is a common,
+  actively-maintained choice in the community for this purpose. Declared
+  in `sandbox/CMakeLists.txt` with `glew-cmake_BUILD_SHARED` forced `OFF`
+  (only the static variant is needed), `glew-cmake_BUILD_STATIC` forced
+  `ON`, and `ONLY_LIBS` forced `ON` to skip building the `glewinfo`/
+  `visualinfo` helper executables. Linked into the `sandbox` target as
+  `libglew_static` (the fork does not provide a namespaced/aliased
+  target name).
 
-When GLEW and GLM are introduced for the OpenGL RHI backend, add them here
-with the same justification (license, maintenance status, why it doesn't
-duplicate an existing dependency).
+When GLM is introduced for the OpenGL RHI backend, add it here with the
+same justification (license, maintenance status, why it doesn't duplicate
+an existing dependency).
 
 ## Warnings / flags
 

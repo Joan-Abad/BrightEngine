@@ -1,5 +1,8 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <cstdio>
 
 int main()
@@ -22,41 +25,39 @@ int main()
 
     glfwMakeContextCurrent(window);
     GLenum Result = glewInit();
-    if(Result != GLEW_OK)
+    if (Result != GLEW_OK)
     {
         std::fprintf(stderr, "Failed to init GLEW\n");
         glfwDestroyWindow(window);
         glfwTerminate();
-        return -1; 
+        return -1;
     }
 
     float vertices[] = {
-    // posición            // color
-    -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f,
-     0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f,
-     0.0f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f
+        // posición            // color
+        -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f, // 0: abajo-izquierda, rojo
+         0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f, // 1: abajo-derecha, verde
+         0.5f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f, // 2: arriba-derecha, azul
+        -0.5f,  0.5f, 0.0f,    1.0f, 1.0f, 0.0f  // 3: arriba-izquierda, amarillo
     };
 
+    unsigned int indices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
 
     const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aColor;
-    
+
     out vec3 vertexColor;
-    uniform float uRotation;
+
+    uniform mat4 uTransform;
 
     void main()
     {
-        float cosA = cos(uRotation);
-        float sinA = sin(uRotation);
-
-        vec3 rotatedPos;
-        rotatedPos.x = aPos.x * cosA - aPos.y * sinA;
-        rotatedPos.y = aPos.x * sinA + aPos.y * cosA;
-        rotatedPos.z = aPos.z;
-
-        gl_Position = vec4(rotatedPos, 1.0);
+        gl_Position = uTransform * vec4(aPos, 1.0);
         vertexColor = aColor;
     }
     )";
@@ -80,6 +81,11 @@ int main()
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    GLuint ebo;
+    glGenBuffers(1, &ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -116,7 +122,7 @@ int main()
     glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
 
-    int rotationLocation = glGetUniformLocation(shaderProgram, "uRotation");
+    int transformLocation = glGetUniformLocation(shaderProgram, "uTransform");
 
     glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
     if (!success)
@@ -125,23 +131,21 @@ int main()
         std::fprintf(stderr, "Shader program link error: %s\n", infoLog);
     }
 
-
-
     glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 
-   while (!glfwWindowShouldClose(window))
+    while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-        
+
         glClear(GL_COLOR_BUFFER_BIT);
-        
+
         glUseProgram(shaderProgram);
-        
+
         float time = (float)glfwGetTime();
-        glUniform1f(rotationLocation, time);
+        glm::mat4 transform = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 0.0f, 1.0f));
+        glUniformMatrix4fv(transformLocation, 1, GL_FALSE, glm::value_ptr(transform));
 
-
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
     }

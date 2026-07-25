@@ -257,6 +257,112 @@ shader programs.
 
 ---
 
+## Las matemáticas de una rotación 2D, paso a paso
+
+**Un vector es solo una lista de números** — `(x, y)` es una flecha desde
+el origen `(0,0)` hasta ese punto.
+
+**Qué calcula "matriz por vector":**
+
+```text
+[a  b]   [x]   [a·x + b·y]
+[c  d] · [y] = [c·x + d·y]
+```
+
+**La idea clave — una matriz son "adónde van los vectores base".**
+Cualquier punto `(x,y)` se puede escribir como `x·(1,0) + y·(0,1)`. Si
+sabes adónde manda una transformación a `(1,0)` y a `(0,1)`, sabes adónde
+manda cualquier punto. Las **columnas** de una matriz son, literalmente,
+adónde aterrizan esos dos vectores base tras la transformación.
+
+**Derivando la matriz de rotación:** rotar `(1,0)` un ángulo `θ` lo manda
+a `(cos θ, sin θ)` (trigonometría básica). La columna de `(0,1)` sale de
+un razonamiento distinto (ver más abajo), dando:
+
+```text
+R(θ) = [cos θ   -sin θ]
+       [sin θ    cos θ]
+```
+
+Multiplicar `R(θ)` por `(x,y)` da `x' = x·cos θ − y·sin θ` y también
+`y' = x·sin θ + y·cos θ` — exactamente la fórmula manual usada antes de
+introducir GLM. No era una fórmula aparte: era esta matriz, escrita
+componente a componente.
+
+**Por qué la columna de `(0,1)` lleva `-sin`, no `sin`:** `(0,1)` está
+siempre exactamente 90° por delante de `(1,0)` en el círculo, y rotar
+preserva esa separación de ángulo. Así que, sea cual sea el ángulo `θ`
+que rotes, `(0,1)` siempre acaba 90° por delante de donde acabó `(1,0)`.
+Rotar cualquier punto `(a,b)` otros 90° más da siempre `(-b, a)`
+(intercambiar coordenadas, negar la nueva primera — un caso particular de
+la misma fórmula general, evaluada en `θ=90°`). Aplicando esa regla al
+punto donde aterrizó `(1,0)`, que es `(cos θ, sin θ)`: `(-sin θ, cos θ)`
+— exactamente la segunda columna. No es una fórmula distinta para
+`(0,1)`, es la misma regla de rotación aplicada a un vector que ya
+empieza 90° adelantado.
+
+**El problema de la traslación:** ninguna matriz puede mover el origen
+`(0,0)` — multiplicar cualquier matriz por `(0,0)` siempre da `(0,0)`.
+Como una traslación mueve el origen por definición, no puede
+representarse como una matriz normal.
+
+**La solución — coordenadas homogéneas:** añadir una coordenada extra
+`w=1` a cada punto (`(x,y)` → `(x,y,1)`) permite construir una matriz que
+sí traslada, colando el desplazamiento en una multiplicación lineal sobre
+esa componente extra:
+
+```text
+[1  0  tx]   [x]   [x + tx]
+[0  1  ty] · [y] = [y + ty]
+[0  0   1]   [1]   [  1   ]
+```
+
+**De 2D a 3D — por qué `mat4`:** mismo truco, una dimensión más: un punto
+3D se convierte en `(x,y,z,w=1)`, la matriz pasa a ser 4x4, con la
+rotación/escala en el bloque 3x3 superior-izquierdo y la traslación en la
+última columna. Por eso `gl_Position` es `vec4`, y por eso todo en
+gráficos usa `mat4` — es la forma mínima de meter traslación + rotación +
+escala en una sola multiplicación.
+
+**Multiplicar matrices = encadenar transformaciones.** El resultado de
+multiplicar dos matrices de transformación aplica ambas en secuencia —
+por eso `glm::rotate(glm::mat4(1.0f), ángulo, eje)` funciona: parte de la
+identidad (matriz "no hagas nada") y la multiplica por la rotación.
+
+---
+
+## Index buffers (EBO) — reutilizar vértices compartidos
+
+Cuando varios triángulos comparten un vértice (ej. un cuadrado hecho de 2
+triángulos comparte 2 esquinas en la diagonal), un **Element Buffer
+Object** evita duplicar los datos completos de ese vértice: el buffer de
+vértices guarda solo los vértices **únicos**, y un buffer aparte de
+**índices** (enteros que apuntan a esos vértices) describe qué vértice
+usa cada triángulo. Se crea igual que un VBO pero con el target
+`GL_ELEMENT_ARRAY_BUFFER` en vez de `GL_ARRAY_BUFFER`, y su binding queda
+grabado dentro del VAO activo (no hace falta re-vincularlo cada frame). El
+draw call correspondiente es `glDrawElements` en vez de `glDrawArrays`.
+
+**Por qué importa, en números:** un índice (`unsigned int`) son 4 bytes.
+Un vértice completo (posición + color, en nuestro caso) son 6 floats ×
+4 bytes = 24 bytes — reutilizar vía índice cuesta una sexta parte de
+duplicar el vértice entero. En mallas reales, donde un vértice interior
+suele compartirse entre ~6 triángulos y cada vértice lleva posición +
+normal + UV + tangente + color (40-50+ bytes), el ahorro de memoria es
+mucho mayor que en un simple cuadrado.
+
+**El ahorro más importante no es de memoria, es de cómputo.** Las GPUs
+tienen una caché pequeña llamada **post-transform vertex cache**: si el
+mismo índice vuelve a aparecer poco después en el buffer de índices (lo
+normal en una malla bien ordenada con vértices compartidos), la GPU
+reutiliza el resultado ya calculado del vertex shader para ese vértice en
+vez de volver a ejecutarlo. Los índices no solo ahorran ancho de banda —
+evitan recalcular el mismo vértice transformado varias veces, lo cual
+importa más cuando el vertex shader es caro (skinning de personajes,
+morph targets).
+
+---
+
 ## Qué son realmente OpenGL, Direct3D, Vulkan y Metal
 
 No son un envoltorio fino que "llama a funciones nativas de la GPU" — hay

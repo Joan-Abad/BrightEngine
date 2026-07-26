@@ -441,3 +441,84 @@ anterior).
 shaders — GLSL (OpenGL/Vulkan), HLSL (Direct3D), MSL (Metal). Cuando la
 RHI soporte varios backends, esto será un problema real a resolver
 (no ahora).
+
+---
+
+## Texturas y unidades de textura
+
+Una textura se sube a la GPU con un patrón similar a un buffer de
+vértices, pero con su propio objeto (`glGenTextures`/`glBindTexture`) y
+su propia función de subida, `glTexImage2D` (equivalente a `glBufferData`
+pero para imágenes). Se muestrea en el fragment shader mediante un
+`uniform sampler2D` y la función `texture(sampler, uv)`, usando
+coordenadas UV (`0.0`–`1.0` por eje) que llegan como un atributo más,
+interpoladas igual que el color.
+
+Parámetros clave al crear una textura:
+
+- `GL_TEXTURE_WRAP_S/T` — qué hacer si una UV cae fuera de `[0,1]`
+  (`GL_REPEAT` la repite en mosaico).
+- `GL_TEXTURE_MIN/MAG_FILTER` — cómo interpolar entre texels al reducir
+  (`MIN`) o ampliar (`MAG`) en pantalla. `GL_NEAREST` = sin suavizar
+  (bloques nítidos); `GL_LINEAR` = mezcla los texels vecinos.
+
+**Unidades de textura — dos capas distintas, no confundir:**
+
+- **TMU (Texture Mapping Units)** — hardware físico real: circuitos
+  dedicados en el chip que calculan direcciones de texel, aplican
+  filtrado, leen la caché de textura. Su número es una característica
+  fija de cada modelo de GPU concreto.
+- **"Unidad de textura" de la API** (`GL_TEXTURE0`, `GL_TEXTURE1`...,
+  seleccionadas con `glActiveTexture`) — una **abstracción lógica**, no
+  un TMU físico dedicado cada una. Es una referencia que le dice al
+  driver "esta textura enlazada corresponde a este número"; el driver
+  reparte el trabajo real de muestreo entre las TMUs físicas disponibles
+  sin que exista una asignación 1:1 unidad↔TMU. El número disponible se
+  consulta en tiempo de ejecución (`GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS`;
+  el spec de OpenGL exige un mínimo de 80, el hardware moderno suele dar
+  bastante más).
+
+El propio uniform `sampler2D` no apunta a una textura directamente —
+apunta a un número de unidad (`glUniform1i(location, 0)` = "lee de la
+unidad 0"), y es `glActiveTexture` + `glBindTexture` quien decide qué
+textura física está enlazada a esa unidad en cada momento. El estado de
+ese enlace vive en registros/tablas internas del driver/GPU, no en la
+VRAM donde sí vive el contenido real de los píxeles de la textura.
+
+---
+
+## Recursos recomendados para profundizar
+
+No hay un único libro que cubra CPU + GPU + rendering al nivel de detalle
+que venimos buscando — lista por área:
+
+**CPU / RAM / arquitectura general:**
+
+- *Computer Organization and Design* (Patterson & Hennessy, ed. RISC-V) —
+  el clásico de referencia universitario, abordable.
+- *What Every Programmer Should Know About Memory* (Ulrich Drepper, PDF
+  gratuito) — jerarquía de memoria/caché desde la perspectiva de un
+  programador de C/C++, directamente aplicable a optimizar el motor.
+- *Computer Systems: A Programmer's Perspective* (Bryant & O'Hallaron,
+  "CS:APP") — puente entre hardware y código en C.
+
+**GPU específicamente:**
+
+- *Programming Massively Parallel Processors* (Kirk & Hwu) — centrado en
+  CUDA, pero la mejor fuente para entender el modelo de ejecución real de
+  una GPU (warps, SIMT, jerarquía de memoria de GPU) en profundidad.
+- Whitepapers de arquitectura de NVIDIA/AMD (gratuitos, buscar "NVIDIA
+  Ampere/Ada architecture whitepaper", "AMD RDNA whitepaper") — densos,
+  pero información de primera mano de los fabricantes.
+
+**Rendering / gráficos — lo más aplicable a BrightEngine directamente:**
+
+- *Real-Time Rendering* (Akenine-Möller, Haines, Hoffman) — el libro de
+  referencia del campo; si solo se compra uno, es este.
+- *Foundations of Game Engine Development* (Eric Lengyel, varios tomos:
+  matemáticas, rendering...) — orientado específicamente a construir un
+  motor desde cero.
+- **learnopengl.com** (gratuito, online) — sigue prácticamente el mismo
+  camino que hemos recorrido aquí (buffers → shaders → transformaciones →
+  texturas), con más profundidad y llegando a temas que aún no hemos
+  tocado (iluminación, sombras, PBR).

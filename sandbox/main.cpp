@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <brightengine/rhi/Device.h>
 #include <cstdio>
 
 int main()
@@ -34,11 +35,10 @@ int main()
     }
 
     float vertices[] = {
-        // posición            // color                  // UV
-        -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f,          0.0f, 0.0f, // 0: abajo-izquierda, rojo
-         0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f,          1.0f, 0.0f, // 1: abajo-derecha, verde
-         0.5f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f,          1.0f, 1.0f, // 2: arriba-derecha, azul
-        -0.5f,  0.5f, 0.0f,    1.0f, 1.0f, 0.0f,          0.0f, 1.0f  // 3: arriba-izquierda, amarillo
+        -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f,          0.0f, 0.0f, 
+         0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f,          1.0f, 0.0f, 
+         0.5f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f,          1.0f, 1.0f, 
+        -0.5f,  0.5f, 0.0f,    1.0f, 1.0f, 0.0f,          0.0f, 1.0f  
     };
 
     unsigned int indices[] = {
@@ -85,15 +85,22 @@ int main()
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    std::unique_ptr<brightengine::rhi::IDevice> device = brightengine::rhi::CreateDevice();
 
-    GLuint ebo;
-    glGenBuffers(1, &ebo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    brightengine::rhi::BufferHandle vertexBuffer = device->CreateBuffer({
+        brightengine::rhi::BufferType::Vertex,
+        sizeof(vertices),
+        vertices
+    });
+
+    brightengine::rhi::BufferHandle indexBuffer = device->CreateBuffer({
+        brightengine::rhi::BufferType::Index,
+        sizeof(indices),
+        indices
+    });
+
+    device->BindVertexBuffer(vertexBuffer);
+    device->BindIndexBuffer(indexBuffer);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -104,7 +111,6 @@ int main()
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
-    // Textura generada por código: un tablero de ajedrez 8x8, RGB.
     const int texWidth = 8;
     const int texHeight = 8;
     unsigned char textureData[texWidth * texHeight * 3];
@@ -176,19 +182,16 @@ int main()
     glUseProgram(shaderProgram);
     glUniform1i(textureLocation, 0);
 
-    // Cámara y proyección: no cambian frame a frame en este ejemplo (nada
-    // mueve la cámara todavía), así que se calculan una sola vez, fuera
-    // del loop.
     glm::mat4 view = glm::lookAt(
-        glm::vec3(0.0f, 0.0f, 3.0f), // posición de la cámara en el mundo
-        glm::vec3(0.0f, 0.0f, 0.0f), // punto al que mira
-        glm::vec3(0.0f, 1.0f, 0.0f)  // qué dirección es "arriba"
+        glm::vec3(0.0f, 0.0f, 3.0f), 
+        glm::vec3(0.0f, 0.0f, 0.0f), 
+        glm::vec3(0.0f, 1.0f, 0.0f)  
     );
     glm::mat4 projection = glm::perspective(
-        glm::radians(45.0f), // campo de visión vertical
-        640.0f / 480.0f,     // aspect ratio (debe coincidir con el tamaño de la ventana)
-        0.1f,                // near plane
-        100.0f                // far plane
+        glm::radians(45.0f), 
+        640.0f / 480.0f,     
+        0.1f,                
+        100.0f               
     );
 
     glUniformMatrix4fv(viewLocation, 1, GL_FALSE, glm::value_ptr(view));
@@ -218,6 +221,9 @@ int main()
 
     glDeleteShader(vertexShaderHandle);
     glDeleteShader(fragmentShaderHandle);
+
+    device->DestroyBuffer(vertexBuffer);
+    device->DestroyBuffer(indexBuffer);
 
     glfwDestroyWindow(window);
     glfwTerminate();

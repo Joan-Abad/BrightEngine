@@ -1,19 +1,30 @@
 # brightengine: core engine library target.
 #
-# This is currently an INTERFACE library — there is no engine source code
-# yet, only the CMake scaffolding (target + public include directory) so
-# that downstream consumers (sandbox/, future tests) have something stable
-# to link against while the RHI/ECS/renderer are designed.
-#
-# Once real .cpp sources exist, this should become a STATIC (or SHARED)
-# library target instead of INTERFACE — see engine/docs/build-conventions.md.
+# STATIC library — the first real engine sources (the OpenGL RHI device
+# backend) now exist, so this is no longer an INTERFACE-only scaffold. See
+# engine/docs/build-conventions.md for the INTERFACE -> STATIC conversion
+# rationale and target-layout rules.
 
-add_library(brightengine INTERFACE)
+add_library(brightengine STATIC
+    src/rhi/opengl/OpenGLDevice.cpp
+)
 add_library(brightengine::brightengine ALIAS brightengine)
 
 target_include_directories(brightengine
-    INTERFACE
+    PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_compile_features(brightengine INTERFACE cxx_std_20)
+target_compile_features(brightengine PUBLIC cxx_std_20)
+
+# GLEW is used privately by the OpenGL RHI backend (engine/src/rhi/opengl/).
+# It must never leak into brightengine's public interface: consumers only
+# see brightengine/rhi/Device.h, not GL/glew.h. GLEW itself is fetched once
+# at the root CMakeLists.txt (before this add_subdirectory), not here — see
+# engine/docs/build-conventions.md.
+target_link_libraries(brightengine
+    PRIVATE
+        libglew_static
+)

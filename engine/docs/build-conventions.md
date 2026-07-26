@@ -48,15 +48,32 @@ elsewhere.
 ## Target layout
 
 - `engine/` builds a single target named `brightengine` (aliased as
-  `brightengine::brightengine`). It starts as an `INTERFACE` library because
-  there is no engine source yet — only the public include directory
-  (`engine/include/brightengine/`). Once real `.cpp` sources are added, this
-  must become a regular `STATIC` (or `SHARED`, if we later need dynamic
-  linking for hot-reload/tooling) library target. Do not keep it
-  `INTERFACE` once sources exist.
+  `brightengine::brightengine`). It was originally an `INTERFACE` library
+  (no sources, only the public include directory), but as of the first RHI
+  OpenGL backend sources (`engine/src/rhi/opengl/OpenGLDevice.cpp`) it is a
+  `STATIC` library. Do not revert it to `INTERFACE`; if dynamic linking is
+  ever needed (hot-reload/tooling), switch to `SHARED` instead.
+  - Public include dir (`engine/include/`) is `PUBLIC`.
+  - `engine/src/` is added as a `PRIVATE` include dir for consistency, even
+    though the current OpenGL backend source includes its sibling header
+    (`OpenGLDevice.h`) with a relative `#include "OpenGLDevice.h"`, which
+    CMake/the compiler resolves via the including file's own directory
+    without needing this on the include path. Keep it declared anyway so
+    future `engine/src` files that need to reach across subdirectories
+    (e.g. `#include "rhi/opengl/OpenGLDevice.h"` from elsewhere in `src/`)
+    don't silently depend on relative-path luck.
+  - `target_compile_features(... cxx_std_20)` is `PUBLIC` (not `INTERFACE`):
+    the library itself now compiles C++20 code, not just its consumers.
+  - Private backend dependencies (e.g. GLEW for the OpenGL RHI backend) are
+    linked `PRIVATE` — they must never leak into brightengine's public
+    interface. Consumers include `brightengine/rhi/Device.h`, never
+    `GL/glew.h`.
 - `sandbox/` builds an executable named `sandbox` that links against
   `brightengine::brightengine` and nothing else engine-related — it may only
-  reach into the engine's public RHI API, never into `engine/src`.
+  reach into the engine's public RHI API, never into `engine/src`. (It also
+  links GLFW/GLEW/GLM directly today for the hand-written OpenGL exercises
+  in `main.cpp` that haven't been folded into the RHI yet; that's expected
+  to shrink over time as more of that logic moves behind `brightengine::rhi`.)
 - Public headers live under `engine/include/brightengine/...` and are the
   only headers `sandbox/` (or any future consumer) may include.
 
@@ -68,31 +85,51 @@ pinned to a stable tag (never a floating branch). No vendored binaries, no
 git submodules, unless a specific dependency requires it and that
 requirement is documented here when it happens.
 
+All three current dependencies are declared once in the **root**
+`CMakeLists.txt`, before `add_subdirectory(engine)`/`add_subdirectory(sandbox)`,
+rather than in `engine/CMakeLists.txt` or `sandbox/CMakeLists.txt`
+individually. This is not just tidiness: `FetchContent_MakeAvailable(<name>)`
+internally does an `add_subdirectory()` on the fetched source the first time
+it populates `<name>`. Once `engine` needed GLEW too (for the OpenGL RHI
+backend), declaring+making-available "glew" separately from both
+`engine/CMakeLists.txt` and `sandbox/CMakeLists.txt` would have populated
+the same source twice and tried to `add_subdirectory()` it twice, producing
+a "target `libglew_static` already defined" error the second time. Declaring
+each dependency exactly once at the root, ahead of both `add_subdirectory`
+calls, means both targets link against the same already-populated targets
+instead. GLFW and GLM don't strictly need this today (only `sandbox` uses
+them directly), but they're kept alongside GLEW at the root too, both for
+consistency and because the RHI is expected to need GLM for its own math
+utilities before long, which would hit the same problem GLEW did.
+
 Current dependencies:
 
 - **GLFW** (`https://github.com/glfw/glfw.git`, tag `3.4`) — window/input
   creation. zlib/libpng license, actively maintained, cross-platform
   (Windows/Linux/macOS), no overlapping dependency already in the project.
-  Declared in `sandbox/CMakeLists.txt` with `GLFW_BUILD_EXAMPLES`,
+  Declared in the root `CMakeLists.txt` with `GLFW_BUILD_EXAMPLES`,
   `GLFW_BUILD_TESTS`, `GLFW_BUILD_DOCS`, and `GLFW_INSTALL` forced `OFF` to
-  avoid building/installing anything beyond the library itself.
+  avoid building/installing anything beyond the library itself. Linked into
+  `sandbox` only (as `glfw`) — `engine` does not need window/input handling.
 - **GLEW** (`https://github.com/Perlmint/glew-cmake.git`, tag
-  `glew-cmake-2.3.1`) — OpenGL function loader, used directly in
-  `sandbox/main.cpp` for the hand-written OpenGL triangle exercise (no RHI
-  involvement). Modified BSD / MIT / Khronos license (same license terms
-  as upstream GLEW), no overlapping dependency already in the project.
+  `glew-cmake-2.3.1`) — OpenGL function loader. Used by two consumers now:
+  `engine/src/rhi/opengl/OpenGLDevice.cpp` (the OpenGL RHI backend, linked
+  `PRIVATE` — never exposed through `brightengine`'s public headers) and
+  `sandbox/main.cpp` directly (for the hand-written OpenGL exercises not yet
+  folded into the RHI). Modified BSD / MIT / Khronos license (same license
+  terms as upstream GLEW), no overlapping dependency already in the project.
   Uses the `Perlmint/glew-cmake` fork rather than the upstream
   `nigels-com/glew` repo: upstream's `CMakeLists.txt` lives under
   `build/cmake` instead of the repo root, which needs `SOURCE_SUBDIR` and
   is awkward with `FetchContent`. The fork provides a root-level
   `CMakeLists.txt` built for exactly this use case and is a common,
-  actively-maintained choice in the community for this purpose. Declared
-  in `sandbox/CMakeLists.txt` with `glew-cmake_BUILD_SHARED` forced `OFF`
+  actively-maintained choice in the community for this purpose. Declared in
+  the root `CMakeLists.txt` with `glew-cmake_BUILD_SHARED` forced `OFF`
   (only the static variant is needed), `glew-cmake_BUILD_STATIC` forced
   `ON`, and `ONLY_LIBS` forced `ON` to skip building the `glewinfo`/
-  `visualinfo` helper executables. Linked into the `sandbox` target as
-  `libglew_static` (the fork does not provide a namespaced/aliased
-  target name).
+  `visualinfo` helper executables. Linked as `libglew_static` (the fork does
+  not provide a namespaced/aliased target name) into both `engine`
+  (`PRIVATE`) and `sandbox` (`PRIVATE`).
 
 - **GLM** (`https://github.com/g-truc/glm.git`, tag `1.0.1`) — vector/matrix
   math (transformation matrices, etc.) for the hand-written OpenGL exercises
@@ -101,8 +138,8 @@ Current dependencies:
   overlapping dependency already in the project. Header-only, so unlike
   GLFW/GLEW there's nothing to build and no example/test/tool options to
   force off with `CACHE BOOL FORCE` — `FetchContent_MakeAvailable(glm)`
-  alone makes the `glm::glm` `INTERFACE` target available. Linked into the
-  `sandbox` target as `glm::glm`.
+  alone makes the `glm::glm` `INTERFACE` target available. Declared in the
+  root `CMakeLists.txt`; linked into `sandbox` only (as `glm::glm`) for now.
 
 ## Warnings / flags
 

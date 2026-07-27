@@ -2,6 +2,7 @@
 
 #include "brightengine/rhi/Buffer.h"
 #include "brightengine/rhi/Pipeline.h"
+#include "brightengine/rhi/Texture.h"
 
 #include <glm/glm.hpp>
 #include <memory>
@@ -30,7 +31,13 @@ namespace brightengine::rhi
         virtual int GetUniformLocation(PipelineHandle handle, const char* name) = 0;
         virtual void SetUniformMat4(PipelineHandle handle, int location, const glm::mat4& value) = 0;
         virtual void SetUniformInt(PipelineHandle handle, int location, int value) = 0;
-        //END PIPELINE  
+        //END PIPELINE
+
+        //START TEXTURE
+        virtual TextureHandle CreateTexture(const TextureDesc& desc) = 0;
+        virtual void DestroyTexture(TextureHandle handle) = 0;
+        virtual void BindTexture(TextureHandle handle, int slot) = 0;
+        //END TEXTURE
     };
 
     // Creates the device for the currently active backend (OpenGL only, for now).

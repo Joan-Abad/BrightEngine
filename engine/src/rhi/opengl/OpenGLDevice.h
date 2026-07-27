@@ -26,6 +26,10 @@ namespace brightengine::rhi
         void SetUniformMat4(PipelineHandle handle, int location, const glm::mat4& value) override;
         void SetUniformInt(PipelineHandle handle, int location, int value) override;
 
+        TextureHandle CreateTexture(const TextureDesc& desc) override;
+        void DestroyTexture(TextureHandle handle) override;
+        void BindTexture(TextureHandle handle, int slot) override;
+
     private:
         struct BufferRecord
         {
@@ -39,10 +43,18 @@ namespace brightengine::rhi
             GLuint vao = 0;
         };
 
+        struct TextureRecord
+        {
+            GLuint glTexture = 0;
+        };
+
         std::unordered_map<uint32_t, BufferRecord> m_buffers;
         uint32_t m_nextBufferId = 1;
 
         std::unordered_map<uint32_t, PipelineRecord> m_pipelines;
         uint32_t m_nextPipelineId = 1;
+
+        std::unordered_map<uint32_t, TextureRecord> m_textures;
+        uint32_t m_nextTextureId = 1;
     };
 }

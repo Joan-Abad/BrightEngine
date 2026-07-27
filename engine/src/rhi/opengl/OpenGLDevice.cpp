@@ -48,6 +48,10 @@ namespace brightengine::rhi
             glDeleteProgram(record.program);
             glDeleteVertexArrays(1, &record.vao);
         }
+        for (auto& [id, record] : m_textures)
+        {
+            glDeleteTextures(1, &record.glTexture);
+        }
     }
 
     BufferHandle OpenGLDevice::CreateBuffer(const BufferDesc& desc)
@@ -181,6 +185,43 @@ namespace brightengine::rhi
     {
         glUseProgram(m_pipelines.at(handle.id).program);
         glUniform1i(location, value);
+    }
+
+    TextureHandle OpenGLDevice::CreateTexture(const TextureDesc& desc)
+    {
+        GLuint glTexture = 0;
+        glGenTextures(1, &glTexture);
+        glBindTexture(GL_TEXTURE_2D, glTexture);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, desc.width, desc.height, 0, GL_RGB, GL_UNSIGNED_BYTE, desc.pixelData);
+
+        TextureHandle handle{ m_nextTextureId++ };
+        m_textures[handle.id] = TextureRecord{ glTexture };
+
+        return handle;
+    }
+
+    void OpenGLDevice::DestroyTexture(TextureHandle handle)
+    {
+        auto it = m_textures.find(handle.id);
+        if (it == m_textures.end())
+        {
+            return;
+        }
+
+        glDeleteTextures(1, &it->second.glTexture);
+        m_textures.erase(it);
+    }
+
+    void OpenGLDevice::BindTexture(TextureHandle handle, int slot)
+    {
+        glActiveTexture(GL_TEXTURE0 + slot);
+        glBindTexture(GL_TEXTURE_2D, m_textures.at(handle.id).glTexture);
     }
 
     std::unique_ptr<IDevice> CreateDevice()

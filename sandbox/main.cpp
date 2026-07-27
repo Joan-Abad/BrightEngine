@@ -136,16 +136,11 @@ int main()
         }
     }
 
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth, texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData);
+    brightengine::rhi::TextureHandle texture = device->CreateTexture({
+        texWidth,
+        texHeight,
+        textureData
+    });
 
     int transformLocation = device->GetUniformLocation(pipeline, "uTransform");
     int viewLocation = device->GetUniformLocation(pipeline, "uView");
@@ -178,9 +173,7 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT);
 
         device->BindPipeline(pipeline);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        device->BindTexture(texture, 0);
 
         float time = (float)glfwGetTime();
         glm::mat4 transform = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -192,6 +185,7 @@ int main()
     }
 
     device->DestroyPipeline(pipeline);
+    device->DestroyTexture(texture);
     device->DestroyBuffer(vertexBuffer);
     device->DestroyBuffer(indexBuffer);
 

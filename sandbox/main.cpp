@@ -2,6 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <brightengine/platform/Window.h>
 #include <brightengine/rhi/Device.h>
+#include <brightengine/scene/Camera.h>
 #include <cstdio>
 #include <memory>
 
@@ -126,20 +127,18 @@ int main()
 
         device->SetUniformInt(pipeline, textureLocation, 0);
 
-        glm::mat4 view = glm::lookAt(
+        brightengine::Camera camera(
             glm::vec3(0.0f, 0.0f, 3.0f),
             glm::vec3(0.0f, 0.0f, 0.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f)
-        );
-        glm::mat4 projection = glm::perspective(
-            glm::radians(45.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f),
+            45.0f,
             640.0f / 480.0f,
             0.1f,
             100.0f
         );
 
-        device->SetUniformMat4(pipeline, viewLocation, view);
-        device->SetUniformMat4(pipeline, projectionLocation, projection);
+        device->SetUniformMat4(pipeline, viewLocation, camera.GetViewMatrix());
+        device->SetUniformMat4(pipeline, projectionLocation, camera.GetProjectionMatrix());
 
         device->SetClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 

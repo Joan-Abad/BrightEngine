@@ -224,6 +224,21 @@ namespace brightengine::rhi
         glBindTexture(GL_TEXTURE_2D, m_textures.at(handle.id).glTexture);
     }
 
+    void OpenGLDevice::SetClearColor(float r, float g, float b, float a)
+    {
+        glClearColor(r, g, b, a);
+    }
+
+    void OpenGLDevice::Clear()
+    {
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+
+    void OpenGLDevice::DrawIndexed(uint32_t indexCount)
+    {
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+    }
+
     std::unique_ptr<IDevice> CreateDevice()
     {
         return std::make_unique<OpenGLDevice>();

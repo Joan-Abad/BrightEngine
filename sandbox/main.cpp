@@ -164,13 +164,13 @@ int main()
     device->SetUniformMat4(pipeline, viewLocation, view);
     device->SetUniformMat4(pipeline, projectionLocation, projection);
 
-    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+    device->SetClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
-        glClear(GL_COLOR_BUFFER_BIT);
+        device->Clear();
 
         device->BindPipeline(pipeline);
         device->BindTexture(texture, 0);
@@ -179,7 +179,7 @@ int main()
         glm::mat4 transform = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 1.0f, 0.0f));
         device->SetUniformMat4(pipeline, transformLocation, transform);
 
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        device->DrawIndexed(sizeof(indices) / sizeof(indices[0]));
 
         glfwSwapBuffers(window);
     }

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace brightengine::rhi
+namespace brightengine
 {
     template <typename Tag>
     struct Handle

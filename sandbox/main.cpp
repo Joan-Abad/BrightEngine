@@ -3,8 +3,10 @@
 #include <brightengine/platform/Window.h>
 #include <brightengine/rhi/Device.h>
 #include <brightengine/scene/Camera.h>
+#include <brightengine/scene/Scene.h>
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 int main()
 {
@@ -142,20 +144,45 @@ int main()
 
         device->SetClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 
+        // Both entities share the same GPU resources (one quad, one shader,
+        // one texture) -- only their Transform differs. This is the whole
+        // point: geometry/pipeline/texture live once, per-entity state
+        // (Transform) is what actually varies.
+        uint32_t indexCount = sizeof(indices) / sizeof(indices[0]);
+
+        brightengine::Scene scene;
+
+        brightengine::Entity entityA = scene.CreateEntity();
+        scene.GetTransform(entityA).position = glm::vec3(-1.0f, 0.0f, 0.0f);
+        scene.GetRenderable(entityA) = { pipeline, vertexBuffer, indexBuffer, texture, indexCount };
+
+        brightengine::Entity entityB = scene.CreateEntity();
+        scene.GetTransform(entityB).position = glm::vec3(1.0f, 0.0f, 0.0f);
+        scene.GetRenderable(entityB) = { pipeline, vertexBuffer, indexBuffer, texture, indexCount };
+
         while (!window.ShouldClose())
         {
             window.PollEvents();
 
             device->Clear();
 
-            device->BindPipeline(pipeline);
-            device->BindTexture(texture, 0);
-
             float time = window.GetTime();
-            glm::mat4 transform = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 1.0f, 0.0f));
-            device->SetUniformMat4(pipeline, transformLocation, transform);
+            scene.GetTransform(entityA).rotationEuler.y = time;
+            scene.GetTransform(entityB).rotationEuler.y = -time;
 
-            device->DrawIndexed(sizeof(indices) / sizeof(indices[0]));
+            const std::vector<brightengine::Transform>& transforms = scene.GetTransforms();
+            const std::vector<brightengine::Renderable>& renderables = scene.GetRenderables();
+
+            for (size_t i = 0; i < transforms.size(); ++i)
+            {
+                const brightengine::Renderable& renderable = renderables[i];
+
+                device->BindPipeline(renderable.pipeline);
+                device->BindTexture(renderable.texture, 0);
+                device->SetUniformMat4(pipeline, transformLocation, transforms[i].GetMatrix());
+
+                device->DrawIndexed(renderable.indexCount);
+            }
 
             window.SwapBuffers();
         }

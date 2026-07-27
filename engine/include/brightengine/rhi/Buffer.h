@@ -1,6 +1,6 @@
 #pragma once
 
-#include "brightengine/rhi/Handle.h"
+#include "brightengine/Handle.h"
 
 #include <cstddef>
 

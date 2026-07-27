@@ -64,16 +64,51 @@ elsewhere.
     don't silently depend on relative-path luck.
   - `target_compile_features(... cxx_std_20)` is `PUBLIC` (not `INTERFACE`):
     the library itself now compiles C++20 code, not just its consumers.
-  - Private backend dependencies (e.g. GLEW for the OpenGL RHI backend) are
-    linked `PRIVATE` — they must never leak into brightengine's public
-    interface. Consumers include `brightengine/rhi/Device.h`, never
-    `GL/glew.h`.
+  - Private backend dependencies (e.g. GLEW for the OpenGL RHI backend, GLFW
+    for windowing) are linked `PRIVATE` — they must never leak into
+    brightengine's public interface. Consumers include
+    `brightengine/rhi/Device.h` and `brightengine/platform/Window.h`, never
+    `GL/glew.h` or `GLFW/glfw3.h`.
+  - Alongside `rhi/` (RHI backends: public header in
+    `include/brightengine/rhi/`, private impl in `src/rhi/<backend>/`), there
+    is now a `platform/` subtree for the concrete (non-RHI) windowing
+    wrapper: public header `include/brightengine/platform/Window.h` (forward-
+    declares the opaque `GLFWwindow` struct, never includes `<GLFW/glfw3.h>`,
+    the same "hide the backend library from consumers" pattern the RHI uses
+    for GLEW/OpenGL), private impl `src/platform/Window.cpp` (the only place
+    in `engine/` that includes `<GLFW/glfw3.h>` directly, plus `<GL/glew.h>`
+    for the `glewInit()` call after context creation). `platform/` is
+    deliberately not part of the `rhi` namespace/directory: windowing isn't
+    multi-backend the way the RHI is, so there's no `IWindow` interface,
+    just the one concrete `Window` class.
 - `sandbox/` builds an executable named `sandbox` that links against
-  `brightengine::brightengine` and nothing else engine-related — it may only
-  reach into the engine's public RHI API, never into `engine/src`. (It also
-  links GLFW/GLEW/GLM directly today for the hand-written OpenGL exercises
-  in `main.cpp` that haven't been folded into the RHI yet; that's expected
-  to shrink over time as more of that logic moves behind `brightengine::rhi`.)
+  `brightengine::brightengine` and `glm::glm` — nothing else engine-related,
+  and (as of `brightengine::Window` absorbing all direct GLFW/GLEW calls)
+  no windowing/GL-loader library directly either. It may only reach into the
+  engine's public RHI/platform API, never into `engine/src`. GLM is still
+  linked directly because `sandbox/main.cpp` uses `<glm/glm.hpp>` itself
+  (transformation matrices) for hand-written OpenGL exercises not yet folded
+  into the RHI; that's expected to shrink over time as more of that logic
+  moves behind `brightengine::rhi`.
+  - `sandbox` used to also link `glfw` and `libglew_static` directly, back
+    when `main.cpp` called GLFW/GLEW functions itself. Once that code moved
+    into `brightengine::Window` (which links both `PRIVATE`), those two
+    direct links in `sandbox/CMakeLists.txt` became redundant and were
+    removed — verified by actually deleting them and doing a full clean
+    reconfigure + rebuild (not just assumed). This works because
+    `brightengine` is a `STATIC` library: CMake still adds a `PRIVATE`
+    static-library dependency's own link items (`glfw.lib`, `glewd.lib`)
+    to the *final linker command line* of anything consuming that static
+    library, even though it doesn't propagate their include paths/compile
+    definitions. `PRIVATE` only means "don't propagate as a usage
+    requirement (headers, `-D` flags) to consumers" — it does not mean
+    "don't propagate at final-link time for a static library archive",
+    since the archive itself has no runtime existence to link against
+    independently; the symbols still have to come from somewhere at the
+    final `sandbox.exe` link. If `brightengine` ever becomes `SHARED`
+    instead, this stops being true (a shared library resolves its own
+    private dependencies internally) and any direct consumer need would
+    have to be re-evaluated then.
 - Public headers live under `engine/include/brightengine/...` and are the
   only headers `sandbox/` (or any future consumer) may include.
 
@@ -97,10 +132,13 @@ the same source twice and tried to `add_subdirectory()` it twice, producing
 a "target `libglew_static` already defined" error the second time. Declaring
 each dependency exactly once at the root, ahead of both `add_subdirectory`
 calls, means both targets link against the same already-populated targets
-instead. GLFW and GLM don't strictly need this today (only `sandbox` uses
-them directly), but they're kept alongside GLEW at the root too, both for
-consistency and because the RHI is expected to need GLM for its own math
-utilities before long, which would hit the same problem GLEW did.
+instead. GLM doesn't strictly need this on its own (only `engine`'s public
+RHI header and `sandbox/main.cpp` use it directly), but it's kept alongside
+GLFW/GLEW at the root too, both for consistency and because more than one
+target already needs it. GLFW and GLEW are now both linked by `engine`
+itself (`platform/Window.cpp` and, for GLEW, `rhi/opengl/OpenGLDevice.cpp`
+too) as well as being fetched once here, which is exactly the
+declare-once-at-the-root scenario this paragraph describes.
 
 Current dependencies:
 
@@ -109,15 +147,23 @@ Current dependencies:
   (Windows/Linux/macOS), no overlapping dependency already in the project.
   Declared in the root `CMakeLists.txt` with `GLFW_BUILD_EXAMPLES`,
   `GLFW_BUILD_TESTS`, `GLFW_BUILD_DOCS`, and `GLFW_INSTALL` forced `OFF` to
-  avoid building/installing anything beyond the library itself. Linked into
-  `sandbox` only (as `glfw`) — `engine` does not need window/input handling.
+  avoid building/installing anything beyond the library itself. Linked
+  `PRIVATE` into `engine` (as `glfw`), used by `engine/src/platform/
+  Window.cpp` — GLFW calls no longer happen in `sandbox/main.cpp` at all
+  (they're wrapped behind `brightengine::Window`), so `sandbox` does not
+  link `glfw` directly anymore; it gets the symbols transitively through
+  `brightengine::brightengine` at final-link time (see "Target layout"
+  above for why that works for a `STATIC` library).
 - **GLEW** (`https://github.com/Perlmint/glew-cmake.git`, tag
-  `glew-cmake-2.3.1`) — OpenGL function loader. Used by two consumers now:
-  `engine/src/rhi/opengl/OpenGLDevice.cpp` (the OpenGL RHI backend, linked
-  `PRIVATE` — never exposed through `brightengine`'s public headers) and
-  `sandbox/main.cpp` directly (for the hand-written OpenGL exercises not yet
-  folded into the RHI). Modified BSD / MIT / Khronos license (same license
-  terms as upstream GLEW), no overlapping dependency already in the project.
+  `glew-cmake-2.3.1`) — OpenGL function loader. Used by two consumers now,
+  both inside `engine`: `engine/src/rhi/opengl/OpenGLDevice.cpp` (the OpenGL
+  RHI backend) and `engine/src/platform/Window.cpp` (the `glewInit()` call
+  after GL context creation), both linked `PRIVATE` — never exposed through
+  `brightengine`'s public headers. `sandbox/main.cpp` no longer calls GLEW
+  directly either (same reasoning as GLFW above), so it doesn't link
+  `libglew_static` directly anymore. Modified BSD / MIT / Khronos license
+  (same license terms as upstream GLEW), no overlapping dependency already
+  in the project.
   Uses the `Perlmint/glew-cmake` fork rather than the upstream
   `nigels-com/glew` repo: upstream's `CMakeLists.txt` lives under
   `build/cmake` instead of the repo root, which needs `SOURCE_SUBDIR` and
@@ -128,8 +174,8 @@ Current dependencies:
   (only the static variant is needed), `glew-cmake_BUILD_STATIC` forced
   `ON`, and `ONLY_LIBS` forced `ON` to skip building the `glewinfo`/
   `visualinfo` helper executables. Linked as `libglew_static` (the fork does
-  not provide a namespaced/aliased target name) into both `engine`
-  (`PRIVATE`) and `sandbox` (`PRIVATE`).
+  not provide a namespaced/aliased target name) into `engine` only
+  (`PRIVATE`) — not into `sandbox` anymore, see above.
 
 - **GLM** (`https://github.com/g-truc/glm.git`, tag `1.0.1`) — vector/matrix
   math (transformation matrices, etc.), originally added for the

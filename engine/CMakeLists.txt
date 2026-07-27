@@ -7,6 +7,7 @@
 
 add_library(brightengine STATIC
     src/rhi/opengl/OpenGLDevice.cpp
+    src/platform/Window.cpp
 )
 add_library(brightengine::brightengine ALIAS brightengine)
 
@@ -19,11 +20,18 @@ target_include_directories(brightengine
 
 target_compile_features(brightengine PUBLIC cxx_std_20)
 
-# GLEW is used privately by the OpenGL RHI backend (engine/src/rhi/opengl/).
+# GLEW is used privately by the OpenGL RHI backend (engine/src/rhi/opengl/)
+# and now also by src/platform/Window.cpp (glewInit() after context creation).
 # It must never leak into brightengine's public interface: consumers only
-# see brightengine/rhi/Device.h, not GL/glew.h. GLEW itself is fetched once
-# at the root CMakeLists.txt (before this add_subdirectory), not here — see
-# engine/docs/build-conventions.md.
+# see brightengine/rhi/Device.h and brightengine/platform/Window.h, not
+# GL/glew.h. GLEW itself is fetched once at the root CMakeLists.txt (before
+# this add_subdirectory), not here — see engine/docs/build-conventions.md.
+#
+# GLFW is used privately by src/platform/Window.cpp (glfwInit/glfwCreateWindow/
+# etc.). Window.h (the public header) only forward-declares the opaque
+# GLFWwindow struct, never includes <GLFW/glfw3.h>, so GLFW stays out of
+# brightengine's public interface too — linked PRIVATE, same reasoning as
+# GLEW. See engine/docs/build-conventions.md.
 #
 # GLM is PUBLIC: brightengine/rhi/Device.h (a public header) includes
 # <glm/glm.hpp> directly (glm::mat4 appears in IDevice's own interface), so
@@ -32,6 +40,7 @@ target_compile_features(brightengine PUBLIC cxx_std_20)
 target_link_libraries(brightengine
     PRIVATE
         libglew_static
+        glfw
     PUBLIC
         glm::glm
 )

@@ -2,9 +2,9 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <brightengine/rhi/Device.h>
 #include <cstdio>
+#include <memory>
 
 int main()
 {
@@ -35,10 +35,11 @@ int main()
     }
 
     float vertices[] = {
-        -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f,          0.0f, 0.0f, 
-         0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f,          1.0f, 0.0f, 
-         0.5f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f,          1.0f, 1.0f, 
-        -0.5f,  0.5f, 0.0f,    1.0f, 1.0f, 0.0f,          0.0f, 1.0f  
+        // posición            // color                  // UV
+        -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f,          0.0f, 0.0f, // 0: abajo-izquierda, rojo
+         0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f,          1.0f, 0.0f, // 1: abajo-derecha, verde
+         0.5f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f,          1.0f, 1.0f, // 2: arriba-derecha, azul
+        -0.5f,  0.5f, 0.0f,    1.0f, 1.0f, 0.0f,          0.0f, 1.0f  // 3: arriba-izquierda, amarillo
     };
 
     unsigned int indices[] = {
@@ -81,10 +82,6 @@ int main()
     }
     )";
 
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
     std::unique_ptr<brightengine::rhi::IDevice> device = brightengine::rhi::CreateDevice();
 
     brightengine::rhi::BufferHandle vertexBuffer = device->CreateBuffer({
@@ -99,18 +96,30 @@ int main()
         indices
     });
 
+    // CreatePipeline bakes in whichever vertex buffer is bound right now.
     device->BindVertexBuffer(vertexBuffer);
+
+    brightengine::rhi::PipelineHandle pipeline = device->CreatePipeline({
+        vertexShaderSource,
+        fragmentShaderSource,
+        {
+            { 0, 3, 0 },
+            { 1, 3, 3 * sizeof(float) },
+            { 2, 2, 6 * sizeof(float) },
+        },
+        8 * sizeof(float)
+    });
+    if (!pipeline.IsValid())
+    {
+        std::fprintf(stderr, "Failed to create pipeline\n");
+        return 1;
+    }
+
+    // The pipeline's VAO is bound now (CreatePipeline left it active) -- bind
+    // the index buffer here so it gets recorded into that same VAO.
     device->BindIndexBuffer(indexBuffer);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
+    // Textura generada por código: un tablero de ajedrez 8x8, RGB.
     const int texWidth = 8;
     const int texHeight = 8;
     unsigned char textureData[texWidth * texHeight * 3];
@@ -138,64 +147,27 @@ int main()
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth, texHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData);
 
-    unsigned int vertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShaderHandle, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vertexShaderHandle);
+    int transformLocation = device->GetUniformLocation(pipeline, "uTransform");
+    int viewLocation = device->GetUniformLocation(pipeline, "uView");
+    int projectionLocation = device->GetUniformLocation(pipeline, "uProjection");
+    int textureLocation = device->GetUniformLocation(pipeline, "uTexture");
 
-    unsigned int fragmentShaderHandle = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShaderHandle, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fragmentShaderHandle);
-
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShaderHandle, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShaderHandle, 512, nullptr, infoLog);
-        std::fprintf(stderr, "Vertex shader compile error: %s\n", infoLog);
-    }
-
-    glGetShaderiv(fragmentShaderHandle, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragmentShaderHandle, 512, nullptr, infoLog);
-        std::fprintf(stderr, "fragment shader compile error: %s\n", infoLog);
-    }
-
-    unsigned int shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShaderHandle);
-    glAttachShader(shaderProgram, fragmentShaderHandle);
-    glLinkProgram(shaderProgram);
-
-    int transformLocation = glGetUniformLocation(shaderProgram, "uTransform");
-    int viewLocation = glGetUniformLocation(shaderProgram, "uView");
-    int projectionLocation = glGetUniformLocation(shaderProgram, "uProjection");
-    int textureLocation = glGetUniformLocation(shaderProgram, "uTexture");
-
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success)
-    {
-        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-        std::fprintf(stderr, "Shader program link error: %s\n", infoLog);
-    }
-
-    glUseProgram(shaderProgram);
-    glUniform1i(textureLocation, 0);
+    device->SetUniformInt(pipeline, textureLocation, 0);
 
     glm::mat4 view = glm::lookAt(
-        glm::vec3(0.0f, 0.0f, 3.0f), 
-        glm::vec3(0.0f, 0.0f, 0.0f), 
-        glm::vec3(0.0f, 1.0f, 0.0f)  
+        glm::vec3(0.0f, 0.0f, 3.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f)
     );
     glm::mat4 projection = glm::perspective(
-        glm::radians(45.0f), 
-        640.0f / 480.0f,     
-        0.1f,                
-        100.0f               
+        glm::radians(45.0f),
+        640.0f / 480.0f,
+        0.1f,
+        100.0f
     );
 
-    glUniformMatrix4fv(viewLocation, 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(projectionLocation, 1, GL_FALSE, glm::value_ptr(projection));
+    device->SetUniformMat4(pipeline, viewLocation, view);
+    device->SetUniformMat4(pipeline, projectionLocation, projection);
 
     glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
 
@@ -205,23 +177,21 @@ int main()
 
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(shaderProgram);
+        device->BindPipeline(pipeline);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
 
         float time = (float)glfwGetTime();
         glm::mat4 transform = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 1.0f, 0.0f));
-        glUniformMatrix4fv(transformLocation, 1, GL_FALSE, glm::value_ptr(transform));
+        device->SetUniformMat4(pipeline, transformLocation, transform);
 
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
     }
 
-    glDeleteShader(vertexShaderHandle);
-    glDeleteShader(fragmentShaderHandle);
-
+    device->DestroyPipeline(pipeline);
     device->DestroyBuffer(vertexBuffer);
     device->DestroyBuffer(indexBuffer);
 

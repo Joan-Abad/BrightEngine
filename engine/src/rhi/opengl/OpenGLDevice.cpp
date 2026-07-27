@@ -1,5 +1,8 @@
 #include "OpenGLDevice.h"
 
+#include <glm/gtc/type_ptr.hpp>
+#include <cstdio>
+
 namespace brightengine::rhi
 {
     namespace
@@ -13,6 +16,25 @@ namespace brightengine::rhi
             }
             return GL_ARRAY_BUFFER;
         }
+
+        bool CompileShader(GLenum stage, const char* source, GLuint& outShader)
+        {
+            outShader = glCreateShader(stage);
+            glShaderSource(outShader, 1, &source, nullptr);
+            glCompileShader(outShader);
+
+            int success = 0;
+            glGetShaderiv(outShader, GL_COMPILE_STATUS, &success);
+            if (!success)
+            {
+                char infoLog[512];
+                glGetShaderInfoLog(outShader, sizeof(infoLog), nullptr, infoLog);
+                std::fprintf(stderr, "Shader compile error: %s\n", infoLog);
+                glDeleteShader(outShader);
+                return false;
+            }
+            return true;
+        }
     }
 
     OpenGLDevice::~OpenGLDevice()
@@ -20,6 +42,11 @@ namespace brightengine::rhi
         for (auto& [id, record] : m_buffers)
         {
             glDeleteBuffers(1, &record.glBuffer);
+        }
+        for (auto& [id, record] : m_pipelines)
+        {
+            glDeleteProgram(record.program);
+            glDeleteVertexArrays(1, &record.vao);
         }
     }
 
@@ -58,6 +85,102 @@ namespace brightengine::rhi
     void OpenGLDevice::BindIndexBuffer(BufferHandle handle)
     {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_buffers.at(handle.id).glBuffer);
+    }
+
+    PipelineHandle OpenGLDevice::CreatePipeline(const PipelineDesc& desc)
+    {
+        GLuint vertexShader = 0;
+        if (!CompileShader(GL_VERTEX_SHADER, desc.vertexShaderSource, vertexShader))
+        {
+            return PipelineHandle{};
+        }
+
+        GLuint fragmentShader = 0;
+        if (!CompileShader(GL_FRAGMENT_SHADER, desc.fragmentShaderSource, fragmentShader))
+        {
+            glDeleteShader(vertexShader);
+            return PipelineHandle{};
+        }
+
+        GLuint program = glCreateProgram();
+        glAttachShader(program, vertexShader);
+        glAttachShader(program, fragmentShader);
+        glLinkProgram(program);
+
+        int success = 0;
+        glGetProgramiv(program, GL_LINK_STATUS, &success);
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
+
+        if (!success)
+        {
+            char infoLog[512];
+            glGetProgramInfoLog(program, sizeof(infoLog), nullptr, infoLog);
+            std::fprintf(stderr, "Shader program link error: %s\n", infoLog);
+            glDeleteProgram(program);
+            return PipelineHandle{};
+        }
+
+        // Bakes the vertex buffer bound to GL_ARRAY_BUFFER right now into this
+        // VAO's attribute setup -- call BindVertexBuffer() before CreatePipeline().
+        GLuint vao = 0;
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
+
+        for (const VertexAttribute& attribute : desc.vertexAttributes)
+        {
+            glVertexAttribPointer(
+                attribute.location,
+                attribute.componentCount,
+                GL_FLOAT,
+                GL_FALSE,
+                static_cast<GLsizei>(desc.vertexStride),
+                reinterpret_cast<void*>(attribute.offset)
+            );
+            glEnableVertexAttribArray(attribute.location);
+        }
+
+        PipelineHandle handle{ m_nextPipelineId++ };
+        m_pipelines[handle.id] = PipelineRecord{ program, vao };
+
+        return handle;
+    }
+
+    void OpenGLDevice::DestroyPipeline(PipelineHandle handle)
+    {
+        auto it = m_pipelines.find(handle.id);
+        if (it == m_pipelines.end())
+        {
+            return;
+        }
+
+        glDeleteProgram(it->second.program);
+        glDeleteVertexArrays(1, &it->second.vao);
+        m_pipelines.erase(it);
+    }
+
+    void OpenGLDevice::BindPipeline(PipelineHandle handle)
+    {
+        const PipelineRecord& record = m_pipelines.at(handle.id);
+        glUseProgram(record.program);
+        glBindVertexArray(record.vao);
+    }
+
+    int OpenGLDevice::GetUniformLocation(PipelineHandle handle, const char* name)
+    {
+        return glGetUniformLocation(m_pipelines.at(handle.id).program, name);
+    }
+
+    void OpenGLDevice::SetUniformMat4(PipelineHandle handle, int location, const glm::mat4& value)
+    {
+        glUseProgram(m_pipelines.at(handle.id).program);
+        glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(value));
+    }
+
+    void OpenGLDevice::SetUniformInt(PipelineHandle handle, int location, int value)
+    {
+        glUseProgram(m_pipelines.at(handle.id).program);
+        glUniform1i(location, value);
     }
 
     std::unique_ptr<IDevice> CreateDevice()

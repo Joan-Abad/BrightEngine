@@ -24,7 +24,14 @@ target_compile_features(brightengine PUBLIC cxx_std_20)
 # see brightengine/rhi/Device.h, not GL/glew.h. GLEW itself is fetched once
 # at the root CMakeLists.txt (before this add_subdirectory), not here — see
 # engine/docs/build-conventions.md.
+#
+# GLM is PUBLIC: brightengine/rhi/Device.h (a public header) includes
+# <glm/glm.hpp> directly (glm::mat4 appears in IDevice's own interface), so
+# any consumer of brightengine::brightengine transitively needs GLM's include
+# path too. See engine/docs/build-conventions.md.
 target_link_libraries(brightengine
     PRIVATE
         libglew_static
+    PUBLIC
+        glm::glm
 )

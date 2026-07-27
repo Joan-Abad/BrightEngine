@@ -132,14 +132,24 @@ Current dependencies:
   (`PRIVATE`) and `sandbox` (`PRIVATE`).
 
 - **GLM** (`https://github.com/g-truc/glm.git`, tag `1.0.1`) — vector/matrix
-  math (transformation matrices, etc.) for the hand-written OpenGL exercises
-  in `sandbox/main.cpp`, ahead of the RHI's own math needs. MIT-licensed
-  (dual MIT/"Happy Bunny" as of the 1.0 series), actively maintained, no
+  math (transformation matrices, etc.), originally added for the
+  hand-written OpenGL exercises in `sandbox/main.cpp`. MIT-licensed (dual
+  MIT/"Happy Bunny" as of the 1.0 series), actively maintained, no
   overlapping dependency already in the project. Header-only, so unlike
   GLFW/GLEW there's nothing to build and no example/test/tool options to
   force off with `CACHE BOOL FORCE` — `FetchContent_MakeAvailable(glm)`
   alone makes the `glm::glm` `INTERFACE` target available. Declared in the
-  root `CMakeLists.txt`; linked into `sandbox` only (as `glm::glm`) for now.
+  root `CMakeLists.txt`. Linked `PUBLIC` into `engine` (as `glm::glm`): the
+  RHI's public header `brightengine/rhi/Device.h` includes `<glm/glm.hpp>`
+  directly (`glm::mat4` appears in `IDevice::SetUniformMat4`'s signature),
+  so GLM is part of `brightengine`'s own public interface, not just an
+  implementation detail — `PUBLIC` (not `PRIVATE`) makes that propagate
+  automatically to any consumer of `brightengine::brightengine`, instead of
+  relying on every consumer coincidentally linking GLM itself. Also linked
+  into `sandbox` directly (as `glm::glm`) for the hand-written OpenGL
+  exercises in `main.cpp` that haven't been folded into the RHI yet; that
+  link is redundant with the transitive one from `brightengine` for
+  RHI-related uses, but still needed for `main.cpp`'s own direct GLM use.
 
 ## Warnings / flags
 

@@ -6,6 +6,7 @@
 #include <brightengine/platform/Window.h>
 #include <brightengine/rhi/Device.h>
 #include <brightengine/scene/Camera.h>
+#include <brightengine/scene/RenderableFactory.h>
 #include <brightengine/scene/Scene.h>
 #include <cstdio>
 #include <memory>
@@ -37,41 +38,6 @@ int main()
 
         std::unique_ptr<brightengine::rhi::IDevice> device = brightengine::rhi::CreateDevice();
 
-        brightengine::rhi::BufferHandle vertexBuffer = device->CreateBuffer({
-            brightengine::rhi::BufferType::Vertex,
-            sizeof(vertices),
-            vertices
-        });
-
-        brightengine::rhi::BufferHandle indexBuffer = device->CreateBuffer({
-            brightengine::rhi::BufferType::Index,
-            sizeof(indices),
-            indices
-        });
-
-        // CreatePipeline bakes in whichever vertex buffer is bound right now.
-        device->BindVertexBuffer(vertexBuffer);
-
-        brightengine::rhi::PipelineHandle pipeline = device->CreatePipeline({
-            vertexShaderSource.c_str(),
-            fragmentShaderSource.c_str(),
-            {
-                { 0, 3, 0 },
-                { 1, 3, 3 * sizeof(float) },
-                { 2, 2, 6 * sizeof(float) },
-            },
-            8 * sizeof(float)
-        });
-        if (!pipeline.IsValid())
-        {
-            std::fprintf(stderr, "Failed to create pipeline\n");
-            return 1;
-        }
-
-        // The pipeline's VAO is bound now (CreatePipeline left it active) -- bind
-        // the index buffer here so it gets recorded into that same VAO.
-        device->BindIndexBuffer(indexBuffer);
-
         brightengine::Image checkerImage(brightengine::GetExecutableDirectory() + "/textures/checker.png");
 
         brightengine::rhi::TextureHandle texture = device->CreateTexture({
@@ -79,6 +45,29 @@ int main()
             checkerImage.GetHeight(),
             checkerImage.GetPixels()
         });
+
+        uint32_t indexCount = sizeof(indices) / sizeof(indices[0]);
+
+        brightengine::Renderable quad = brightengine::CreateRenderable(*device, {
+            vertices, sizeof(vertices),
+            indices, sizeof(indices),
+            indexCount,
+            vertexShaderSource.c_str(), fragmentShaderSource.c_str(),
+            {
+                { 0, 3, 0 },
+                { 1, 3, 3 * sizeof(float) },
+                { 2, 2, 6 * sizeof(float) },
+            },
+            8 * sizeof(float),
+            texture
+        });
+        if (!quad.pipeline.IsValid())
+        {
+            std::fprintf(stderr, "Failed to create pipeline\n");
+            return 1;
+        }
+
+        brightengine::rhi::PipelineHandle pipeline = quad.pipeline;
 
         int transformLocation = device->GetUniformLocation(pipeline, "uTransform");
         int viewLocation = device->GetUniformLocation(pipeline, "uView");
@@ -106,17 +95,15 @@ int main()
         // one texture) -- only their Transform differs. This is the whole
         // point: geometry/pipeline/texture live once, per-entity state
         // (Transform) is what actually varies.
-        uint32_t indexCount = sizeof(indices) / sizeof(indices[0]);
-
         brightengine::Scene scene;
 
         brightengine::Entity entityA = scene.CreateEntity();
         scene.GetTransform(entityA).position = glm::vec3(-1.0f, 0.0f, 0.0f);
-        scene.GetRenderable(entityA) = { pipeline, vertexBuffer, indexBuffer, texture, indexCount };
+        scene.GetRenderable(entityA) = quad;
 
         brightengine::Entity entityB = scene.CreateEntity();
         scene.GetTransform(entityB).position = glm::vec3(1.0f, 0.0f, 0.0f);
-        scene.GetRenderable(entityB) = { pipeline, vertexBuffer, indexBuffer, texture, indexCount };
+        scene.GetRenderable(entityB) = quad;
 
         window.SetCursorCaptured(true);
         glm::vec2 lastCursorPos = window.GetCursorPosition();
@@ -182,10 +169,10 @@ int main()
             window.SwapBuffers();
         }
 
-        device->DestroyPipeline(pipeline);
-        device->DestroyTexture(texture);
-        device->DestroyBuffer(vertexBuffer);
-        device->DestroyBuffer(indexBuffer);
+        device->DestroyPipeline(quad.pipeline);
+        device->DestroyTexture(quad.texture);
+        device->DestroyBuffer(quad.vertexBuffer);
+        device->DestroyBuffer(quad.indexBuffer);
     }
     catch (const std::exception& e)
     {

@@ -81,6 +81,20 @@ elsewhere.
     deliberately not part of the `rhi` namespace/directory: windowing isn't
     multi-backend the way the RHI is, so there's no `IWindow` interface,
     just the one concrete `Window` class.
+  - `platform/` also now has a `FileSystem` utility: public header
+    `include/brightengine/platform/FileSystem.h` declares
+    `GetExecutableDirectory()` and `ReadTextFile()`, private impl
+    `src/platform/FileSystem.cpp` branches `#if defined(_WIN32)` (uses
+    `<windows.h>`'s `GetModuleFileNameA`, with `WIN32_LEAN_AND_MEAN` defined
+    first) vs. `#else` (uses `<unistd.h>`'s `readlink("/proc/self/exe", ...)`
+    for Linux). Neither branch needs an extra `target_link_libraries` entry:
+    on Windows, `GetModuleFileNameA` resolves against `kernel32.lib`, which
+    MSVC's linker already includes by default on every link line (verified
+    by inspecting the actual `link.exe` invocation via `cmake --build -v`,
+    not just assumed); on Linux, `readlink` is a glibc symbol, always
+    available. If a future platform/API needs something MSVC doesn't
+    default-link (e.g. `Shlwapi.lib`, `Dbghelp.lib`), add it explicitly to
+    `target_link_libraries(brightengine PRIVATE ...)` and document it here.
 - `sandbox/` builds an executable named `sandbox` that links against
   `brightengine::brightengine` and `glm::glm` — nothing else engine-related,
   and (as of `brightengine::Window` absorbing all direct GLFW/GLEW calls)
@@ -111,6 +125,35 @@ elsewhere.
     have to be re-evaluated then.
 - Public headers live under `engine/include/brightengine/...` and are the
   only headers `sandbox/` (or any future consumer) may include.
+- `sandbox/main.cpp` loads its GLSL shaders from real files on disk (no
+  longer embedded C++ string literals) via
+  `brightengine::GetExecutableDirectory() + "/shaders/" + <name>`, so
+  `sandbox/shaders/` must exist next to the built `sandbox`/`sandbox.exe`
+  binary at runtime. `sandbox/CMakeLists.txt` handles this with a
+  GLOB-dependent stamp file rather than a plain `POST_BUILD` command
+  attached directly to the `sandbox` target: a `POST_BUILD` custom command
+  only reruns when that target's own link step reruns, so if a shader
+  file's *contents* change but nothing in `main.cpp` forces a relink, a
+  naive `POST_BUILD copy_directory` would silently go stale. Instead:
+  `file(GLOB SANDBOX_SHADER_FILES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/shaders/*)` feeds `DEPENDS` on an
+  `add_custom_command(OUTPUT .../shaders.stamp COMMAND ${CMAKE_COMMAND} -E
+  copy_directory ... $<TARGET_FILE_DIR:sandbox>/shaders COMMAND
+  ${CMAKE_COMMAND} -E touch .../shaders.stamp ...)`, wrapped in an
+  `add_custom_target(sandbox_shaders ALL DEPENDS .../shaders.stamp)` that
+  `sandbox` depends on via `add_dependencies`. `CONFIGURE_DEPENDS` makes
+  CMake re-glob at build time so adding/removing a shader file is picked
+  up without a manual reconfigure, and the build tool (Ninja) only reruns
+  the copy when a globbed file's mtime is newer than the stamp. Verified by
+  a full clean configure+build with the MSVC/Ninja toolchain below and
+  confirming `shaders/basic.vert`/`basic.frag` actually land in
+  `<build-dir>/sandbox/shaders/`, next to `sandbox.exe`
+  (`$<TARGET_FILE_DIR:sandbox>` rather than a hardcoded path, so this
+  keeps working for a multi-config generator too, even though the project
+  currently only builds single-config Ninja). Any future asset directory
+  (textures, models, audio, ...) added under `sandbox/` needs the same
+  treatment — a plain one-time copy or a `POST_BUILD` copy tied to the
+  executable's own relink is not sufficient.
 
 ## Dependencies
 

@@ -8,6 +8,7 @@
 add_library(brightengine STATIC
     src/rhi/opengl/OpenGLDevice.cpp
     src/platform/Window.cpp
+    src/platform/FileSystem.cpp
 )
 add_library(brightengine::brightengine ALIAS brightengine)
 

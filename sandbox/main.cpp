@@ -1,11 +1,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <brightengine/platform/FileSystem.h>
 #include <brightengine/platform/Window.h>
 #include <brightengine/rhi/Device.h>
 #include <brightengine/scene/Camera.h>
 #include <brightengine/scene/Scene.h>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 int main()
@@ -27,40 +29,9 @@ int main()
             2, 3, 0
         };
 
-        const char* vertexShaderSource = R"(
-        #version 330 core
-        layout (location = 0) in vec3 aPos;
-        layout (location = 1) in vec3 aColor;
-        layout (location = 2) in vec2 aTexCoord;
-
-        out vec3 vertexColor;
-        out vec2 TexCoord;
-
-        uniform mat4 uTransform;
-        uniform mat4 uView;
-        uniform mat4 uProjection;
-
-        void main()
-        {
-            gl_Position = uProjection * uView * uTransform * vec4(aPos, 1.0);
-            vertexColor = aColor;
-            TexCoord = aTexCoord;
-        }
-        )";
-
-        const char* fragmentShaderSource = R"(
-        #version 330 core
-        in vec3 vertexColor;
-        in vec2 TexCoord;
-        out vec4 FragColor;
-
-        uniform sampler2D uTexture;
-
-        void main()
-        {
-            FragColor = texture(uTexture, TexCoord) * vec4(vertexColor, 1.0);
-        }
-        )";
+        std::string shaderDir = brightengine::GetExecutableDirectory() + "/shaders/";
+        std::string vertexShaderSource = brightengine::ReadTextFile(shaderDir + "basic.vert");
+        std::string fragmentShaderSource = brightengine::ReadTextFile(shaderDir + "basic.frag");
 
         std::unique_ptr<brightengine::rhi::IDevice> device = brightengine::rhi::CreateDevice();
 
@@ -80,8 +51,8 @@ int main()
         device->BindVertexBuffer(vertexBuffer);
 
         brightengine::rhi::PipelineHandle pipeline = device->CreatePipeline({
-            vertexShaderSource,
-            fragmentShaderSource,
+            vertexShaderSource.c_str(),
+            fragmentShaderSource.c_str(),
             {
                 { 0, 3, 0 },
                 { 1, 3, 3 * sizeof(float) },

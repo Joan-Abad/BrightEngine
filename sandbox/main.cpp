@@ -89,7 +89,8 @@ int main()
 
         brightengine::Camera camera(
             glm::vec3(0.0f, 0.0f, 3.0f),
-            glm::vec3(0.0f, 0.0f, 0.0f),
+            -90.0f, // yaw: facing -Z, same starting view as before
+            0.0f,   // pitch
             glm::vec3(0.0f, 1.0f, 0.0f),
             45.0f,
             640.0f / 480.0f,
@@ -117,8 +118,12 @@ int main()
         scene.GetTransform(entityB).position = glm::vec3(1.0f, 0.0f, 0.0f);
         scene.GetRenderable(entityB) = { pipeline, vertexBuffer, indexBuffer, texture, indexCount };
 
+        window.SetCursorCaptured(true);
+        glm::vec2 lastCursorPos = window.GetCursorPosition();
+
         float lastFrameTime = window.GetTime();
         const float cameraSpeed = 2.0f; // units per second
+        const float mouseSensitivity = 0.1f; // degrees per pixel
 
         while (!window.ShouldClose())
         {
@@ -148,6 +153,11 @@ int main()
             {
                 camera.MoveRight(cameraSpeed * deltaTime);
             }
+
+            glm::vec2 cursorPos = window.GetCursorPosition();
+            glm::vec2 cursorDelta = cursorPos - lastCursorPos;
+            lastCursorPos = cursorPos;
+            camera.Rotate(cursorDelta.x * mouseSensitivity, -cursorDelta.y * mouseSensitivity);
 
             device->Clear();
             device->SetUniformMat4(pipeline, viewLocation, camera.GetViewMatrix());

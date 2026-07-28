@@ -2,6 +2,8 @@
 
 #include "brightengine/platform/KeyCode.h"
 
+#include <glm/glm.hpp>
+
 struct GLFWwindow;
 
 namespace brightengine
@@ -25,6 +27,9 @@ namespace brightengine
 
         bool IsKeyPressed(KeyCode key) const;
         void RequestClose();
+
+        glm::vec2 GetCursorPosition() const;
+        void SetCursorCaptured(bool captured);
 
     private:
         GLFWwindow* m_window = nullptr;

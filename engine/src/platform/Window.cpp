@@ -85,4 +85,16 @@ namespace brightengine
     {
         glfwSetWindowShouldClose(m_window, GLFW_TRUE);
     }
+
+    glm::vec2 Window::GetCursorPosition() const
+    {
+        double x, y;
+        glfwGetCursorPos(m_window, &x, &y);
+        return glm::vec2(static_cast<float>(x), static_cast<float>(y));
+    }
+
+    void Window::SetCursorCaptured(bool captured)
+    {
+        glfwSetInputMode(m_window, GLFW_CURSOR, captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
 }

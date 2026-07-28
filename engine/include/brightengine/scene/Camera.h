@@ -8,10 +8,11 @@ namespace brightengine
     class Camera
     {
     public:
-        Camera(glm::vec3 position, glm::vec3 target, glm::vec3 up,
+        Camera(glm::vec3 position, float yawDegrees, float pitchDegrees, glm::vec3 up,
                float fovDegrees, float aspectRatio, float nearPlane, float farPlane)
             : m_position(position)
-            , m_target(target)
+            , m_yaw(yawDegrees)
+            , m_pitch(pitchDegrees)
             , m_up(up)
             , m_fovDegrees(fovDegrees)
             , m_aspectRatio(aspectRatio)
@@ -20,9 +21,18 @@ namespace brightengine
         {
         }
 
+        glm::vec3 GetForward() const
+        {
+            glm::vec3 forward;
+            forward.x = cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+            forward.y = sin(glm::radians(m_pitch));
+            forward.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
+            return glm::normalize(forward);
+        }
+
         glm::mat4 GetViewMatrix() const
         {
-            return glm::lookAt(m_position, m_target, m_up);
+            return glm::lookAt(m_position, m_position + GetForward(), m_up);
         }
 
         glm::mat4 GetProjectionMatrix() const
@@ -30,27 +40,29 @@ namespace brightengine
             return glm::perspective(glm::radians(m_fovDegrees), m_aspectRatio, m_nearPlane, m_farPlane);
         }
 
-        // Translate along the current view direction -- position and target
-        // move together, so the camera keeps looking the same way. No
-        // rotation/mouse-look yet, that's a separate piece.
         void MoveForward(float amount)
         {
-            glm::vec3 forward = glm::normalize(m_target - m_position);
-            m_position += forward * amount;
-            m_target += forward * amount;
+            m_position += GetForward() * amount;
         }
 
         void MoveRight(float amount)
         {
-            glm::vec3 forward = glm::normalize(m_target - m_position);
-            glm::vec3 right = glm::normalize(glm::cross(forward, m_up));
+            glm::vec3 right = glm::normalize(glm::cross(GetForward(), m_up));
             m_position += right * amount;
-            m_target += right * amount;
+        }
+
+        // Accumulates yaw/pitch from mouse deltas. Pitch is clamped so the
+        // camera can't flip upside down looking straight up/down.
+        void Rotate(float deltaYawDegrees, float deltaPitchDegrees)
+        {
+            m_yaw += deltaYawDegrees;
+            m_pitch = glm::clamp(m_pitch + deltaPitchDegrees, -89.0f, 89.0f);
         }
 
     private:
         glm::vec3 m_position;
-        glm::vec3 m_target;
+        float m_yaw;   // degrees, rotation around the world Y axis
+        float m_pitch; // degrees, rotation up/down, clamped to +/-89
         glm::vec3 m_up;
         float m_fovDegrees;
         float m_aspectRatio;

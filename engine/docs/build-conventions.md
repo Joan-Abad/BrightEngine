@@ -31,10 +31,13 @@ elsewhere.
        bundled `ninja.exe`, under
        `Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\`, on `PATH`).
     2. Configure with
-       `cmake -S . -B build-msvc -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl`.
-    3. Build with `cmake --build build-msvc`.
+       `cmake -S . -B build-msvc-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl`
+       (or `build-msvc-release` / `-DCMAKE_BUILD_TYPE=Release` — see
+       "Build configurations" below).
+    3. Build with `cmake --build build-msvc-debug` (or
+       `build-msvc-release`).
     Use a build directory name that encodes the toolchain (e.g.
-    `build-msvc/`) so it never collides with a MinGW/GCC `build/`
+    `build-msvc-debug/`) so it never collides with a MinGW/GCC `build/`
     directory from a different toolchain — never reuse one build
     directory across toolchains.
   - If a future CMake version recognizes the installed VS generator name
@@ -44,6 +47,39 @@ elsewhere.
     principle.
 - `CMAKE_EXPORT_COMPILE_COMMANDS ON` is set at the root so editor tooling
   (clangd, etc.) works out of the box.
+
+## Build configurations
+
+Ninja (used for the MSVC toolchain per the workaround above, and also a
+common choice on Linux) is a **single-config** generator: unlike the Visual
+Studio generator, which bakes both Debug and Release into one `.sln` and
+lets you switch configurations at build time, a Ninja build tree only ever
+has one `CMAKE_BUILD_TYPE` baked in at configure time. Passing a different
+`-DCMAKE_BUILD_TYPE` into an *existing* Ninja build directory does not
+reliably give you a clean second configuration — the safe, supported
+pattern is one build directory per configuration:
+
+- `build-msvc-debug/` — configured with `-DCMAKE_BUILD_TYPE=Debug`.
+- `build-msvc-release/` — configured with `-DCMAKE_BUILD_TYPE=Release`.
+
+Never reuse a single `build-msvc/`-style directory across configurations by
+re-running `cmake` with a different `CMAKE_BUILD_TYPE` in place — always
+configure a fresh, distinctly-named directory instead. (An earlier session
+did use an unqualified `build-msvc/` directory for what was implicitly a
+Debug build; it has since been replaced by `build-msvc-debug/` plus the new
+`build-msvc-release/`, both configured from a clean directory rather than
+by mutating the old one in place, since Ninja build trees are not
+guaranteed safe to rename/repurpose after the fact.)
+
+Both directories are configured identically otherwise — same MSVC toolchain
+via `vcvarsall.bat x64` and explicit `-DCMAKE_C_COMPILER=cl
+-DCMAKE_CXX_COMPILER=cl`, per the Ninja/MSVC workaround above — they only
+differ in `CMAKE_BUILD_TYPE`. Verified by a full clean
+(`cmake --build <dir> --clean-first`) build of both directories: both
+produced a working `sandbox.exe` with zero compiler warnings, and the
+`sandbox_shaders` copy step (see "Target layout" below) worked
+independently in each, since it's driven by `$<TARGET_FILE_DIR:sandbox>`
+inside each build tree rather than a shared/hardcoded path.
 
 ## Target layout
 

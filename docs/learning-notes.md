@@ -522,3 +522,68 @@ que venimos buscando — lista por área:
   camino que hemos recorrido aquí (buffers → shaders → transformaciones →
   texturas), con más profundidad y llegando a temas que aún no hemos
   tocado (iluminación, sombras, PBR).
+
+---
+
+## Build system: quién hace qué (CMake, Ninja, MSBuild, el compilador)
+
+Cuatro actores distintos, fácil confundirlos porque a veces se solapan:
+
+- **CMake — configura y genera.** Lee los `CMakeLists.txt` del proyecto y
+  **escribe** los ficheros de build de bajo nivel para otra herramienta
+  distinta (`build.ninja`, `compile_commands.json`, `CMakeCache.txt`...).
+  CMake no compila nada por sí mismo.
+- **Ninja — ejecuta.** Lee el `build.ninja` que CMake ya generó y lanza de
+  verdad los comandos de compilación/enlace que describe, en el orden y
+  con las dependencias correctas. Ninja no genera nada, solo corre el
+  plan ya escrito.
+- **El compilador — hace el trabajo real.** Ninja invoca al compilador en
+  cada paso — en esta máquina, **MSVC** (`cl.exe`, de
+  `F:\Microsoft Visual Studio 2026`); en Linux sería GCC o Clang. Ni
+  CMake ni Ninja compilan código — solo orquestan cuándo y cómo se llama
+  al compilador.
+
+**Cadena completa:** CMake configura y genera → Ninja ejecuta el plan,
+llamando al compilador en cada paso → MSVC/GCC/Clang compila de verdad.
+
+**¿Y MSBuild?** Es el motor de compilación propio de Microsoft — el que
+ejecuta de verdad los `.sln`/`.vcxproj` que usa Visual Studio (y también
+`dotnet build`). Es el motor detrás de la opción de CMake
+`-G "Visual Studio 17 2022"`. No lo usamos aquí por dos motivos:
+
+- **Motivo inmediato:** CMake 3.27 no tiene un nombre de generador para
+  VS2026 (demasiado reciente) — sin ese generador no hay forma directa
+  de que CMake escriba `.sln`/`.vcxproj` para MSBuild.
+- **Motivo de fondo, más allá de ese problema puntual:** BrightEngine
+  compila en Windows *y* Linux, y MSBuild no existe en Linux — así que
+  usar Ninja en ambas plataformas da un único flujo de ejecución de
+  build igual en los dos sitios (solo cambia el compilador, MSVC vs
+  GCC/Clang, no la herramienta que orquesta). Además, el modo
+  "Open Folder" de Visual Studio con CMake también suele usar Ninja por
+  debajo, no el generador clásico de `.sln`.
+
+**Generadores CMake, en general:** con `-G "Ninja"`, CMake escribe
+`build.ninja`, ejecutas `ninja`. Con `-G "Unix Makefiles"`, escribe
+`Makefile`s, ejecutas `make`. Con `-G "Visual Studio 17 2022"`, escribe
+`.sln`/`.vcxproj`, los ejecuta MSBuild. Ninja es solo uno de varios
+motores de ejecución posibles a los que CMake puede apuntar.
+
+**De dónde viene Ninja:** lo creó Evan Martin en Google, hacia 2010,
+porque `make` se estaba quedando lento compilando Chromium — el propio
+parseo del Makefile y decidir qué estaba desactualizado ya tardaba
+mucho en un proyecto tan grande. Ninja se diseñó deliberadamente
+minimalista y muy rápido, sacrificando flexibilidad a propósito (sin
+comodines, condicionales, ni lenguaje de script) — sus ficheros `.ninja`
+están pensados para ser generados por otra herramienta (CMake, Meson,
+GN...), no escritos a mano.
+
+**Por qué generadores de una sola configuración (Ninja/Make) no tienen
+carpetas `Debug`/`Release` automáticas:** el generador de Visual Studio
+es multi-configuración — el mismo proyecto generado sabe construir varias
+configuraciones sin reconfigurar, por eso necesita carpetas separadas.
+Ninja es de una sola configuración: un directorio de build representa
+**una única configuración a la vez**, la que se le dio a CMake vía
+`CMAKE_BUILD_TYPE` al configurar. La convención habitual para tener
+varias es usar **carpetas de build separadas por configuración** (p.ej.
+`build-msvc-debug/`, `build-msvc-release/`), no reutilizar la misma
+carpeta cambiando el tipo.

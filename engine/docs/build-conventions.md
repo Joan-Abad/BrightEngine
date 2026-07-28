@@ -190,6 +190,18 @@ inside each build tree rather than a shared/hardcoded path.
   (textures, models, audio, ...) added under `sandbox/` needs the same
   treatment — a plain one-time copy or a `POST_BUILD` copy tied to the
   executable's own relink is not sufficient.
+- `sandbox/textures/` (currently just `checker.png`, loaded via
+  `brightengine::Image` + `brightengine::GetExecutableDirectory() +
+  "/textures/checker.png"` in `main.cpp`) uses the exact same
+  GLOB-dependent-stamp-file + custom-target pattern as `sandbox/shaders/`
+  above, duplicated as its own `SANDBOX_TEXTURE_FILES` /
+  `textures.stamp` / `sandbox_textures` custom target (rather than
+  generalizing both into one parameterized helper — two copies of a
+  ~15-line pattern was judged not worth a `function()` yet; revisit if a
+  third asset directory shows up). Verified the same way: a full clean
+  reconfigure+build in both `build-msvc-debug/` and `build-msvc-release/`
+  lands `sandbox/textures/checker.png` at
+  `$<TARGET_FILE_DIR:sandbox>/textures/checker.png` in each.
 
 ## Dependencies
 
@@ -199,7 +211,7 @@ pinned to a stable tag (never a floating branch). No vendored binaries, no
 git submodules, unless a specific dependency requires it and that
 requirement is documented here when it happens.
 
-All three current dependencies are declared once in the **root**
+All current dependencies are declared once in the **root**
 `CMakeLists.txt`, before `add_subdirectory(engine)`/`add_subdirectory(sandbox)`,
 rather than in `engine/CMakeLists.txt` or `sandbox/CMakeLists.txt`
 individually. This is not just tidiness: `FetchContent_MakeAvailable(<name>)`
@@ -255,6 +267,38 @@ Current dependencies:
   `visualinfo` helper executables. Linked as `libglew_static` (the fork does
   not provide a namespaced/aliased target name) into `engine` only
   (`PRIVATE`) — not into `sandbox` anymore, see above.
+
+- **stb** (`https://github.com/nothings/stb.git`, commit
+  `31c1ad37456438565541f4919958214b6e762fb4`) — only `stb_image.h` is used,
+  for decoding image files (`engine/src/assets/Image.cpp`, backing
+  `sandbox/textures/checker.png`). Public domain (unlicense) / MIT dual
+  license (pick either), a widely used and still actively maintained
+  collection of single-header libraries, and doesn't duplicate anything
+  else already in the project (GLFW/GLEW/GLM are windowing/GL-loading/math,
+  not image decoding). Unlike GLFW/GLEW/GLM, this repo has **no
+  `CMakeLists.txt` of its own** — it's a loose collection of single-header
+  libraries with nothing to configure or build. `FetchContent_Declare` +
+  `FetchContent_MakeAvailable(stb)` therefore just populates
+  `${stb_SOURCE_DIR}` without an implicit `add_subdirectory()` (there's no
+  `CMakeLists.txt` there for it to descend into) and exposes no CMake
+  target at all. `engine/CMakeLists.txt` manually adds `${stb_SOURCE_DIR}`
+  to `target_include_directories(brightengine PRIVATE ...)` so
+  `src/assets/Image.cpp`'s `#include <stb_image.h>` resolves; `PRIVATE`
+  because `brightengine/assets/Image.h` (the public header) does not
+  include `stb_image.h` itself (same "hide the backend library" pattern as
+  GLEW/GLFW above), so it must never leak into `brightengine`'s public
+  interface.
+  stb does not use version tags in any normal sense (`git ls-remote --tags`
+  against the repo returns nothing — confirmed when this dependency was
+  added), so unlike GLFW/GLEW/GLM's tag pins, this is pinned to a specific
+  commit SHA instead, which still satisfies "never a floating branch": it
+  was the tip of `master` at the time this dependency was added. `stb_image.h`
+  itself does the usual single-header-library dance: the header only
+  declares functions, and exactly one translation unit across the whole
+  link must `#define STB_IMAGE_IMPLEMENTATION` before including it to get
+  the actual definitions — that's `engine/src/assets/Image.cpp`, and only
+  that file; no other `.cpp` in the project may do the same `#define` or
+  the link will fail with duplicate symbols.
 
 - **GLM** (`https://github.com/g-truc/glm.git`, tag `1.0.1`) — vector/matrix
   math (transformation matrices, etc.), originally added for the

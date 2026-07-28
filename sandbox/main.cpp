@@ -1,5 +1,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <brightengine/assets/Image.h>
 #include <brightengine/platform/FileSystem.h>
 #include <brightengine/platform/Window.h>
 #include <brightengine/rhi/Device.h>
@@ -70,27 +71,12 @@ int main()
         // the index buffer here so it gets recorded into that same VAO.
         device->BindIndexBuffer(indexBuffer);
 
-        // Textura generada por código: un tablero de ajedrez 8x8, RGB.
-        const int texWidth = 8;
-        const int texHeight = 8;
-        unsigned char textureData[texWidth * texHeight * 3];
-        for (int y = 0; y < texHeight; ++y)
-        {
-            for (int x = 0; x < texWidth; ++x)
-            {
-                bool isWhite = (x + y) % 2 == 0;
-                unsigned char value = isWhite ? 255 : 0;
-                int index = (y * texWidth + x) * 3;
-                textureData[index + 0] = value;
-                textureData[index + 1] = value;
-                textureData[index + 2] = value;
-            }
-        }
+        brightengine::Image checkerImage(brightengine::GetExecutableDirectory() + "/textures/checker.png");
 
         brightengine::rhi::TextureHandle texture = device->CreateTexture({
-            texWidth,
-            texHeight,
-            textureData
+            checkerImage.GetWidth(),
+            checkerImage.GetHeight(),
+            checkerImage.GetPixels()
         });
 
         int transformLocation = device->GetUniformLocation(pipeline, "uTransform");

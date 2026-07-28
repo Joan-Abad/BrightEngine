@@ -9,6 +9,7 @@ add_library(brightengine STATIC
     src/rhi/opengl/OpenGLDevice.cpp
     src/platform/Window.cpp
     src/platform/FileSystem.cpp
+    src/assets/Image.cpp
 )
 add_library(brightengine::brightengine ALIAS brightengine)
 
@@ -17,6 +18,13 @@ target_include_directories(brightengine
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        # stb (stb_image.h) has no CMakeLists.txt/target of its own -- see
+        # the root CMakeLists.txt's FetchContent_Declare(stb) comment and
+        # engine/docs/build-conventions.md. Only src/assets/Image.cpp
+        # includes <stb_image.h>, and brightengine/assets/Image.h (the
+        # public header) does not, so this stays PRIVATE, same reasoning as
+        # GLEW below.
+        ${stb_SOURCE_DIR}
 )
 
 target_compile_features(brightengine PUBLIC cxx_std_20)

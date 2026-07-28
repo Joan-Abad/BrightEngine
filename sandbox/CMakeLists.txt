@@ -46,3 +46,28 @@ add_custom_target(sandbox_shaders ALL
 )
 
 add_dependencies(sandbox sandbox_shaders)
+
+# sandbox/textures/ needs the exact same treatment as sandbox/shaders/ above
+# (see the comment on sandbox_shaders): sandbox/main.cpp resolves
+# <brightengine::GetExecutableDirectory()>/textures/checker.png at runtime, so
+# sandbox/textures/ has to end up next to the built sandbox executable, and
+# has to re-copy whenever a texture file's contents change, not just once.
+file(GLOB SANDBOX_TEXTURE_FILES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/textures/*
+)
+
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/textures.stamp
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/textures
+            $<TARGET_FILE_DIR:sandbox>/textures
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/textures.stamp
+    DEPENDS ${SANDBOX_TEXTURE_FILES}
+    COMMENT "Copying sandbox/textures/ next to the sandbox executable"
+)
+
+add_custom_target(sandbox_textures ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/textures.stamp
+)
+
+add_dependencies(sandbox sandbox_textures)

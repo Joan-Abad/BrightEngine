@@ -69,5 +69,23 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glm)
 
+# stb_image (single-header image loading library, part of the nothings/stb
+# collection). Unlike GLFW/GLEW/GLM, this repo has no CMakeLists.txt of its
+# own -- FetchContent_MakeAvailable() just populates the source without an
+# add_subdirectory() step (there's nothing to configure/build: it's headers
+# only, and stb doesn't even ship an INTERFACE target for us to link
+# against). engine/CMakeLists.txt manually adds ${stb_SOURCE_DIR} as a
+# PRIVATE include directory on the `brightengine` target instead. See
+# engine/docs/build-conventions.md for why the commit below (rather than a
+# version tag) is pinned.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        31c1ad37456438565541f4919958214b6e762fb4
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_MakeAvailable(stb)
+
 add_subdirectory(engine)
 add_subdirectory(sandbox)

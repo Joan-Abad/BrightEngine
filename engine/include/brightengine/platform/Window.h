@@ -1,5 +1,7 @@
 #pragma once
 
+#include "brightengine/platform/KeyCode.h"
+
 struct GLFWwindow;
 
 namespace brightengine
@@ -20,6 +22,9 @@ namespace brightengine
         void PollEvents();
         void SwapBuffers();
         float GetTime() const;
+
+        bool IsKeyPressed(KeyCode key) const;
+        void RequestClose();
 
     private:
         GLFWwindow* m_window = nullptr;

@@ -30,6 +30,24 @@ namespace brightengine
             return glm::perspective(glm::radians(m_fovDegrees), m_aspectRatio, m_nearPlane, m_farPlane);
         }
 
+        // Translate along the current view direction -- position and target
+        // move together, so the camera keeps looking the same way. No
+        // rotation/mouse-look yet, that's a separate piece.
+        void MoveForward(float amount)
+        {
+            glm::vec3 forward = glm::normalize(m_target - m_position);
+            m_position += forward * amount;
+            m_target += forward * amount;
+        }
+
+        void MoveRight(float amount)
+        {
+            glm::vec3 forward = glm::normalize(m_target - m_position);
+            glm::vec3 right = glm::normalize(glm::cross(forward, m_up));
+            m_position += right * amount;
+            m_target += right * amount;
+        }
+
     private:
         glm::vec3 m_position;
         glm::vec3 m_target;

@@ -2,6 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <brightengine/assets/Image.h>
 #include <brightengine/platform/FileSystem.h>
+#include <brightengine/platform/KeyCode.h>
 #include <brightengine/platform/Window.h>
 #include <brightengine/rhi/Device.h>
 #include <brightengine/scene/Camera.h>
@@ -96,7 +97,6 @@ int main()
             100.0f
         );
 
-        device->SetUniformMat4(pipeline, viewLocation, camera.GetViewMatrix());
         device->SetUniformMat4(pipeline, projectionLocation, camera.GetProjectionMatrix());
 
         device->SetClearColor(0.1f, 0.2f, 0.3f, 1.0f);
@@ -117,13 +117,41 @@ int main()
         scene.GetTransform(entityB).position = glm::vec3(1.0f, 0.0f, 0.0f);
         scene.GetRenderable(entityB) = { pipeline, vertexBuffer, indexBuffer, texture, indexCount };
 
+        float lastFrameTime = window.GetTime();
+        const float cameraSpeed = 2.0f; // units per second
+
         while (!window.ShouldClose())
         {
             window.PollEvents();
 
-            device->Clear();
-
             float time = window.GetTime();
+            float deltaTime = time - lastFrameTime;
+            lastFrameTime = time;
+
+            if (window.IsKeyPressed(brightengine::KeyCode::Escape))
+            {
+                window.RequestClose();
+            }
+            if (window.IsKeyPressed(brightengine::KeyCode::W))
+            {
+                camera.MoveForward(cameraSpeed * deltaTime);
+            }
+            if (window.IsKeyPressed(brightengine::KeyCode::S))
+            {
+                camera.MoveForward(-cameraSpeed * deltaTime);
+            }
+            if (window.IsKeyPressed(brightengine::KeyCode::A))
+            {
+                camera.MoveRight(-cameraSpeed * deltaTime);
+            }
+            if (window.IsKeyPressed(brightengine::KeyCode::D))
+            {
+                camera.MoveRight(cameraSpeed * deltaTime);
+            }
+
+            device->Clear();
+            device->SetUniformMat4(pipeline, viewLocation, camera.GetViewMatrix());
+
             scene.GetTransform(entityA).rotationEuler.y = time;
             scene.GetTransform(entityB).rotationEuler.y = -time;
 

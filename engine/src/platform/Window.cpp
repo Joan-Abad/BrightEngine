@@ -6,6 +6,22 @@
 
 namespace brightengine
 {
+    namespace
+    {
+        int ToGLFWKey(KeyCode key)
+        {
+            switch (key)
+            {
+                case KeyCode::W:      return GLFW_KEY_W;
+                case KeyCode::A:      return GLFW_KEY_A;
+                case KeyCode::S:      return GLFW_KEY_S;
+                case KeyCode::D:      return GLFW_KEY_D;
+                case KeyCode::Escape: return GLFW_KEY_ESCAPE;
+            }
+            return GLFW_KEY_UNKNOWN;
+        }
+    }
+
     Window::Window(int width, int height, const char* title)
     {
         if (!glfwInit())
@@ -58,5 +74,15 @@ namespace brightengine
         // glfwGetTime() is actually a global clock, not per-window -- exposed
         // here as a method purely for convenience/discoverability.
         return static_cast<float>(glfwGetTime());
+    }
+
+    bool Window::IsKeyPressed(KeyCode key) const
+    {
+        return glfwGetKey(m_window, ToGLFWKey(key)) == GLFW_PRESS;
+    }
+
+    void Window::RequestClose()
+    {
+        glfwSetWindowShouldClose(m_window, GLFW_TRUE);
     }
 }

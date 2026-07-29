@@ -202,6 +202,16 @@ inside each build tree rather than a shared/hardcoded path.
   reconfigure+build in both `build-msvc-debug/` and `build-msvc-release/`
   lands `sandbox/textures/checker.png` at
   `$<TARGET_FILE_DIR:sandbox>/textures/checker.png` in each.
+- `sandbox/models/` (currently just `cube.obj`, loaded via
+  `brightengine::Mesh` + `brightengine::GetExecutableDirectory() +
+  "/models/cube.obj"` in `main.cpp`) uses the exact same
+  GLOB-dependent-stamp-file + custom-target pattern as `sandbox/shaders/`
+  and `sandbox/textures/` above, duplicated as its own
+  `SANDBOX_MODEL_FILES` / `models.stamp` / `sandbox_models` custom target.
+  Verified the same way: a full clean reconfigure+build in both
+  `build-msvc-debug/` and `build-msvc-release/` lands
+  `sandbox/models/cube.obj` at `$<TARGET_FILE_DIR:sandbox>/models/cube.obj`
+  in each.
 
 ## Dependencies
 
@@ -299,6 +309,89 @@ Current dependencies:
   the actual definitions — that's `engine/src/assets/Image.cpp`, and only
   that file; no other `.cpp` in the project may do the same `#define` or
   the link will fail with duplicate symbols.
+
+- **tinyobjloader** (`https://github.com/tinyobjloader/tinyobjloader.git`, tag
+  `v2.0.0rc13`) — `.obj` model loading, used by `engine/src/assets/Mesh.cpp`
+  (backing `sandbox/models/cube.obj`). MIT-licensed, actively maintained
+  (the `release` branch has commits well past this tag), does not duplicate
+  stb: stb_image decodes raster image formats (PNG/JPG/...), tinyobjloader
+  parses a completely different, text-based 3D mesh format (Wavefront
+  `.obj`) — no functional overlap.
+  Unlike stb, this repo *does* ship its own root `CMakeLists.txt`
+  (`add_library(tinyobjloader ...)` compiling `tiny_obj_loader.cc`, which
+  itself does the identical single-header-style
+  `#define TINYOBJLOADER_IMPLEMENTATION` + `#include` dance internally) — but
+  it is deliberately **not** consumed that way here, unlike GLFW/GLEW/GLM.
+  An earlier version of this project declared it with
+  `FetchContent_Declare` + `FetchContent_MakeAvailable(tinyobjloader)`
+  (the same pattern as GLFW/GLEW/GLM) and linked the resulting
+  `tinyobjloader` target `PRIVATE` into `engine`. That "worked" — both
+  Debug and Release linked with no duplicate-symbol errors — but only by
+  accident: `engine/src/assets/Mesh.cpp` already does its own
+  `#define TINYOBJLOADER_IMPLEMENTATION` + `#include <tiny_obj_loader.h>`
+  (the same pattern used for `stb_image.h`), so `Mesh.cpp.obj` already
+  defines every `tinyobj::` symbol the final link needs. A static-library
+  archive member (`tiny_obj_loader.cc.obj` inside `tinyobjloader.lib`) is
+  only pulled into a link if some *other* object file has an unresolved
+  reference to a symbol only it provides — since nothing did, the linker
+  silently never extracted it, and the project built a second, redundant
+  compiled copy of the exact same implementation code for no benefit, with
+  no guarantee that stayed true (e.g. if a future translation unit ever
+  referenced `tinyobj::` symbols without its own
+  `TINYOBJLOADER_IMPLEMENTATION` define, or if link order/dedup behavior
+  differed on another toolchain).
+  This has been fixed: tinyobjloader is now treated exactly like stb — a
+  single-header-style library where `Mesh.cpp` is the one and only
+  translation unit providing the implementation, so its own
+  `CMakeLists.txt` must never be processed (no `add_subdirectory`, no
+  second compiled `tinyobjloader.lib`). The root `CMakeLists.txt` still
+  does `FetchContent_Declare(tinyobjloader ...)` (same tag/URL as before),
+  but instead of `FetchContent_MakeAvailable(tinyobjloader)` it does:
+
+  ```cmake
+  FetchContent_GetProperties(tinyobjloader)
+  if(NOT tinyobjloader_POPULATED)
+      FetchContent_Populate(tinyobjloader)
+  endif()
+  ```
+
+  `FetchContent_Populate()` fetches the source into
+  `${tinyobjloader_SOURCE_DIR}` without an implicit `add_subdirectory()`
+  step (there's nothing there for it to configure), and the
+  `FetchContent_GetProperties()`/`tinyobjloader_POPULATED` guard makes this
+  safe to re-run across configure passes (mirrors the classic pre-3.14
+  "populate only" `FetchContent` pattern). Checked against this project's
+  CMake version (3.27.0): calling `FetchContent_Populate(tinyobjloader)`
+  this way emits **no deprecation warning** — the deprecation notice CMake
+  eventually added for `FetchContent_Populate()` (discouraging it in favor
+  of `FetchContent_MakeAvailable()` + `EXCLUDE_FROM_ALL`) was introduced in
+  a later CMake release than what's installed here; verified by actually
+  reconfiguring both `build-msvc-debug` and `build-msvc-release` from
+  scratch and checking the configure log for any CMake `Warning`/`Deprecat`
+  output — there was none. If this project's CMake is ever upgraded past
+  the version that introduces that warning, revisit this and switch to
+  whatever mechanism CMake recommends at that point instead of carrying a
+  now-discouraged call forward unquestioned.
+  `engine/CMakeLists.txt` now adds `${tinyobjloader_SOURCE_DIR}` to
+  `target_include_directories(brightengine PRIVATE ...)`, right alongside
+  `${stb_SOURCE_DIR}` (the header `tiny_obj_loader.h` lives at that repo's
+  root, same as `stb_image.h`) — and there is no
+  `target_link_libraries(brightengine PRIVATE tinyobjloader)` line anymore;
+  that target no longer exists in the build tree at all. `PRIVATE` because
+  `brightengine/assets/Mesh.h` (the public header) does not include
+  `<tiny_obj_loader.h>`, same "hide the backend library" pattern as
+  GLEW/GLFW/stb above.
+  Verified by a full clean reconfigure + build of both `build-msvc-debug`
+  and `build-msvc-release` (see "Build configurations" below): both
+  produce a working `sandbox.exe` with zero compiler/linker warnings, the
+  actual `link.exe` command line for `sandbox.exe` in both configurations
+  contains no `tinyobjloader.lib`/`tinyobjloader.dir` reference at all (only
+  `brightengine.lib`, `glm.lib`, `glew.lib`/`glewd.lib`, `glfw3.lib`,
+  `opengl32.lib`, and the default Windows system libs), and
+  `_deps/tinyobjloader-build/` in each build tree is empty (confirming its
+  `CMakeLists.txt` was never processed) while
+  `_deps/tinyobjloader-subbuild/` still exists (that's `FetchContent`'s own
+  internal populate-step scaffolding, not the library's build).
 
 - **GLM** (`https://github.com/g-truc/glm.git`, tag `1.0.1`) — vector/matrix
   math (transformation matrices, etc.), originally added for the

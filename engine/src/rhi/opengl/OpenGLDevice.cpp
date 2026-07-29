@@ -229,9 +229,24 @@ namespace brightengine::rhi
         glClearColor(r, g, b, a);
     }
 
+    void OpenGLDevice::SetDepthTestEnabled(bool enabled)
+    {
+        if (enabled)
+        {
+            glEnable(GL_DEPTH_TEST);
+        }
+        else
+        {
+            glDisable(GL_DEPTH_TEST);
+        }
+    }
+
     void OpenGLDevice::Clear()
     {
-        glClear(GL_COLOR_BUFFER_BIT);
+        // Always clear depth too, even if depth testing is currently
+        // disabled -- harmless, and avoids stale depth values if it gets
+        // enabled later without every call site remembering to update this.
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
     void OpenGLDevice::DrawIndexed(uint32_t indexCount)

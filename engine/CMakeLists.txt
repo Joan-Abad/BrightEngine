@@ -10,6 +10,7 @@ add_library(brightengine STATIC
     src/platform/Window.cpp
     src/platform/FileSystem.cpp
     src/assets/Image.cpp
+    src/assets/Mesh.cpp
 )
 add_library(brightengine::brightengine ALIAS brightengine)
 
@@ -25,6 +26,15 @@ target_include_directories(brightengine
         # public header) does not, so this stays PRIVATE, same reasoning as
         # GLEW below.
         ${stb_SOURCE_DIR}
+        # tinyobjloader (tiny_obj_loader.h) -- its own CMakeLists.txt is
+        # deliberately never processed (FetchContent_Populate() only, not
+        # FetchContent_MakeAvailable()) to avoid building a second,
+        # redundant copy of the exact same TINYOBJLOADER_IMPLEMENTATION that
+        # src/assets/Mesh.cpp already compiles itself -- see the root
+        # CMakeLists.txt's FetchContent_Declare(tinyobjloader) comment and
+        # engine/docs/build-conventions.md. Only Mesh.cpp includes
+        # <tiny_obj_loader.h>, so this stays PRIVATE, same reasoning as stb.
+        ${tinyobjloader_SOURCE_DIR}
 )
 
 target_compile_features(brightengine PUBLIC cxx_std_20)
@@ -46,6 +56,13 @@ target_compile_features(brightengine PUBLIC cxx_std_20)
 # <glm/glm.hpp> directly (glm::mat4 appears in IDevice's own interface), so
 # any consumer of brightengine::brightengine transitively needs GLM's include
 # path too. See engine/docs/build-conventions.md.
+#
+# tinyobjloader is used privately by src/assets/Mesh.cpp (the .obj loader
+# backing brightengine::Mesh) via ${tinyobjloader_SOURCE_DIR} above -- there
+# is no "tinyobjloader" CMake target to link against (its own CMakeLists.txt
+# is never processed; see the root CMakeLists.txt's
+# FetchContent_Declare(tinyobjloader) comment), so nothing appears here for
+# it, same as stb.
 target_link_libraries(brightengine
     PRIVATE
         libglew_static

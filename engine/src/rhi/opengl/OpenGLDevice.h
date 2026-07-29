@@ -31,6 +31,7 @@ namespace brightengine::rhi
         void BindTexture(TextureHandle handle, int slot) override;
 
         void SetClearColor(float r, float g, float b, float a) override;
+        void SetDepthTestEnabled(bool enabled) override;
         void Clear() override;
         void DrawIndexed(uint32_t indexCount) override;
 

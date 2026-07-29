@@ -1,6 +1,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <brightengine/assets/Image.h>
+#include <brightengine/assets/Mesh.h>
 #include <brightengine/platform/FileSystem.h>
 #include <brightengine/platform/KeyCode.h>
 #include <brightengine/platform/Window.h>
@@ -19,18 +20,7 @@ int main()
     {
         brightengine::Window window(640, 480, "BrightEngine Sandbox");
 
-        float vertices[] = {
-            // posición            // color                  // UV
-            -0.5f, -0.5f, 0.0f,    1.0f, 0.0f, 0.0f,          0.0f, 0.0f, // 0: abajo-izquierda, rojo
-             0.5f, -0.5f, 0.0f,    0.0f, 1.0f, 0.0f,          1.0f, 0.0f, // 1: abajo-derecha, verde
-             0.5f,  0.5f, 0.0f,    0.0f, 0.0f, 1.0f,          1.0f, 1.0f, // 2: arriba-derecha, azul
-            -0.5f,  0.5f, 0.0f,    1.0f, 1.0f, 0.0f,          0.0f, 1.0f  // 3: arriba-izquierda, amarillo
-        };
-
-        unsigned int indices[] = {
-            0, 1, 2,
-            2, 3, 0
-        };
+        brightengine::Mesh cubeMesh(brightengine::GetExecutableDirectory() + "/models/cube.obj");
 
         std::string shaderDir = brightengine::GetExecutableDirectory() + "/shaders/";
         std::string vertexShaderSource = brightengine::ReadTextFile(shaderDir + "basic.vert");
@@ -46,28 +36,28 @@ int main()
             checkerImage.GetPixels()
         });
 
-        uint32_t indexCount = sizeof(indices) / sizeof(indices[0]);
+        const std::vector<brightengine::MeshVertex>& cubeVertices = cubeMesh.GetVertices();
+        const std::vector<uint32_t>& cubeIndices = cubeMesh.GetIndices();
 
-        brightengine::Renderable quad = brightengine::CreateRenderable(*device, {
-            vertices, sizeof(vertices),
-            indices, sizeof(indices),
-            indexCount,
+        brightengine::Renderable cube = brightengine::CreateRenderable(*device, {
+            cubeVertices.data(), cubeVertices.size() * sizeof(brightengine::MeshVertex),
+            cubeIndices.data(), cubeIndices.size() * sizeof(uint32_t),
+            static_cast<uint32_t>(cubeIndices.size()),
             vertexShaderSource.c_str(), fragmentShaderSource.c_str(),
             {
                 { 0, 3, 0 },
-                { 1, 3, 3 * sizeof(float) },
-                { 2, 2, 6 * sizeof(float) },
+                { 1, 2, 3 * sizeof(float) },
             },
-            8 * sizeof(float),
+            5 * sizeof(float),
             texture
         });
-        if (!quad.pipeline.IsValid())
+        if (!cube.pipeline.IsValid())
         {
             std::fprintf(stderr, "Failed to create pipeline\n");
             return 1;
         }
 
-        brightengine::rhi::PipelineHandle pipeline = quad.pipeline;
+        brightengine::rhi::PipelineHandle pipeline = cube.pipeline;
 
         int transformLocation = device->GetUniformLocation(pipeline, "uTransform");
         int viewLocation = device->GetUniformLocation(pipeline, "uView");
@@ -90,8 +80,9 @@ int main()
         device->SetUniformMat4(pipeline, projectionLocation, camera.GetProjectionMatrix());
 
         device->SetClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+        device->SetDepthTestEnabled(true);
 
-        // Both entities share the same GPU resources (one quad, one shader,
+        // Both entities share the same GPU resources (one cube, one shader,
         // one texture) -- only their Transform differs. This is the whole
         // point: geometry/pipeline/texture live once, per-entity state
         // (Transform) is what actually varies.
@@ -99,11 +90,11 @@ int main()
 
         brightengine::Entity entityA = scene.CreateEntity();
         scene.GetTransform(entityA).position = glm::vec3(-1.0f, 0.0f, 0.0f);
-        scene.GetRenderable(entityA) = quad;
+        scene.GetRenderable(entityA) = cube;
 
         brightengine::Entity entityB = scene.CreateEntity();
         scene.GetTransform(entityB).position = glm::vec3(1.0f, 0.0f, 0.0f);
-        scene.GetRenderable(entityB) = quad;
+        scene.GetRenderable(entityB) = cube;
 
         window.SetCursorCaptured(true);
         glm::vec2 lastCursorPos = window.GetCursorPosition();
@@ -169,10 +160,10 @@ int main()
             window.SwapBuffers();
         }
 
-        device->DestroyPipeline(quad.pipeline);
-        device->DestroyTexture(quad.texture);
-        device->DestroyBuffer(quad.vertexBuffer);
-        device->DestroyBuffer(quad.indexBuffer);
+        device->DestroyPipeline(cube.pipeline);
+        device->DestroyTexture(cube.texture);
+        device->DestroyBuffer(cube.vertexBuffer);
+        device->DestroyBuffer(cube.indexBuffer);
     }
     catch (const std::exception& e)
     {

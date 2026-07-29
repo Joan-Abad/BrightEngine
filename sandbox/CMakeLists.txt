@@ -71,3 +71,30 @@ add_custom_target(sandbox_textures ALL
 )
 
 add_dependencies(sandbox sandbox_textures)
+
+# sandbox/models/ needs the exact same treatment as sandbox/shaders/ and
+# sandbox/textures/ above (see the comment on sandbox_shaders):
+# sandbox/main.cpp resolves
+# <brightengine::GetExecutableDirectory()>/models/cube.obj at runtime via
+# brightengine::Mesh, so sandbox/models/ has to end up next to the built
+# sandbox executable, and has to re-copy whenever a model file's contents
+# change, not just once.
+file(GLOB SANDBOX_MODEL_FILES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/models/*
+)
+
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/models.stamp
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/models
+            $<TARGET_FILE_DIR:sandbox>/models
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/models.stamp
+    DEPENDS ${SANDBOX_MODEL_FILES}
+    COMMENT "Copying sandbox/models/ next to the sandbox executable"
+)
+
+add_custom_target(sandbox_models ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/models.stamp
+)
+
+add_dependencies(sandbox sandbox_models)

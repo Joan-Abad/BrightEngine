@@ -87,5 +87,37 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(stb)
 
+# tinyobjloader (.obj model loading, engine/src/assets/Mesh.cpp). This repo
+# ships its own root CMakeLists.txt (add_library(tinyobjloader ...) compiling
+# tiny_obj_loader.cc, which itself does the identical single-header
+# #define TINYOBJLOADER_IMPLEMENTATION + #include dance internally) -- but
+# Mesh.cpp already does that same #define+#include itself, so letting
+# FetchContent_MakeAvailable() add_subdirectory() this and link the
+# resulting "tinyobjloader" target would build a second, redundant copy of
+# the exact same implementation. Unlike GLFW/GLEW/GLM (real dependencies we
+# want built+linked as libraries), tinyobjloader is used here exactly like
+# stb: a single-header-style library where engine/src/assets/Mesh.cpp is the
+# one and only translation unit providing the implementation. So its
+# CMakeLists.txt is deliberately never processed -- FetchContent_Populate()
+# (called directly, after FetchContent_GetProperties() guards against
+# re-populating on a second configure) fetches the source without an
+# add_subdirectory() step, exposing only ${tinyobjloader_SOURCE_DIR} for
+# engine/CMakeLists.txt to add as an include directory, same as
+# ${stb_SOURCE_DIR}. See engine/docs/build-conventions.md for the full
+# rationale (this replaced an earlier FetchContent_MakeAvailable-based
+# approach that built a redundant tinyobjloader.lib) and for why the tag
+# below (rather than a newer non-tagged commit) is pinned.
+FetchContent_Declare(
+    tinyobjloader
+    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader.git
+    GIT_TAG        v2.0.0rc13
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_GetProperties(tinyobjloader)
+if(NOT tinyobjloader_POPULATED)
+    FetchContent_Populate(tinyobjloader)
+endif()
+
 add_subdirectory(engine)
 add_subdirectory(sandbox)
